@@ -3,6 +3,7 @@
 #' @export
 setClass("plate", slots=list(
   plateId="character",
+  statList="character",
   format="numeric",
   wellIds = "vector",
   plateData = "data.frame",
