@@ -1,4 +1,4 @@
-##' Reads in data from stemonix platform and converts to plate class 
+##' Reads in data from stemonix platform and converts to plate class
 ##' @param filename (string) path to file to read in
 ##' @return plate class object
 ##' @author Andrew Patt
@@ -27,7 +27,7 @@ read_stemonix_data <- function(filename){
   plate_id = unlist(strsplit(plate_id,"\\",fixed=TRUE))
   plate_id = plate_id[length(plate_id)]
   plate_id = gsub(".fmd","",plate_id,fixed=TRUE)
-  
+
   # Loop through the remaining plates
   parsed_plate_list <- list()
   for(i in 1:(length(statistic_dividers)-1)){
@@ -54,13 +54,13 @@ read_stemonix_data <- function(filename){
 }
 
 ##' Internal function for parsing vector corresponding to a single plate
-##' @param plate 
+##' @param plate
 ##' @return parsed plate data
 ##' @author Andrew Patt
 parse_individual_plate <- function(plate){
   statistic = plate[1]
   statistic = gsub("Statistic = ","",statistic)
-  
+
   plate_rows <- list()
   temp_row <- c()
 
@@ -81,9 +81,9 @@ parse_individual_plate <- function(plate){
                             function(x){ifelse(nchar(x)<2,
                                                return(paste0("0",x)),
                                                return(x))})
-  
+
   wellId_rows <- sapply(plate_rows[2:length(plate_rows)],function(x) return(x[1]))
-  
+
   wellIds <- c()
   for(i in wellId_rows){
     for(j in wellId_columns){
@@ -101,9 +101,9 @@ parse_individual_plate <- function(plate){
 }
 
 
-##' @param filename 
-##' @param plate 
-##' @return 
+##' @param filename
+##' @param plate
+##' @return
 ##' @author Andrew Patt
 read_stemonix_metadata <- function(filename,plate){
   raw_data <- read.csv(filename)

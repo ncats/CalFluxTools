@@ -9,17 +9,27 @@ setClass("plate", slots=list(
   plateData = "data.frame",
   plateDataMap = "list",
   plateAnnotMap = "data.frame",
-  parameters = "vector"
+  parameters = "vector",
+  imputationFlag = "vector",
+  imputationMethod = "character",
+  qualityFlags = "list"
 )
 )
+
 
 #' @export
 setClass("plateset", slots=list(
   setname = "character",
   plateIdList = "vector",
   plateReplicateSets = "vector",
-  plates = "list"
+  plates = "list",
+  plateNames = "vector",
+  transformedPlateData = "list",
+  transformationNames = "vector"
 )
 )
+
+
+
 
 
