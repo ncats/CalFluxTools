@@ -7,6 +7,7 @@ setClass("plate", slots=list(
   format="numeric",
   wellIds = "vector",
   plateData = "data.frame",
+
   plateDataMap = "list",
   plateAnnotMap = "data.frame",
   parameters = "vector",
@@ -16,6 +17,8 @@ setClass("plate", slots=list(
 )
 )
 
+# corrPlateData = "data.frame",
+# correctionProcesses = "vector",
 
 #' @export
 setClass("plateset", slots=list(

@@ -13,6 +13,7 @@ RoxygenNote: 7.1.2
 Imports: 
     circlize,
     ComplexHeatmap,
+    cowplot,
     dplyr,
     ggplot2,
     gridExtra,
