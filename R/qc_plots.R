@@ -1,4 +1,21 @@
 
+
+missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) {
+  missingData <- aso::missingDataReport(plate, plateSize)
+
+  missingData <- na.omit(missingData[missingData$good_count < (plateSize-missingValLimit),])
+
+  dfM <- reshape2::melt(missingData, id.vars = c("parameter"),
+                        measureVars = colnames(missingData)[2:ncol(missingData)],
+                        variable.name = 'status',
+                        value.name = 'well_count')
+
+  p <- ggplot2::ggplot(dfM, ggplot2::aes(x=status,y=well_count))
+  p <- p + ggplot2::geom_col() + ggplot2::facet_wrap(~parameter, ncol=4)
+  p <- p + ggplot2::geom_text(ggplot2::aes(label = well_count), colour = "black")
+  p
+}
+
 #' Produces a grid of plate QC views for a supplied reference plate, experimental plate
 #' and any transformations applied to the data.
 #' @param plateSet a PlateSet object containing at least one reference and one experimental treatment plate.
