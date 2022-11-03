@@ -1,5 +1,15 @@
 
 
+#' missingPlateDataChart
+#'
+#' @param plate plate object containing data to evaluate
+#' @param plateSize plate well count, e.g. 384 (default)
+#' @param missingValLimit limits the plots to only return plots for parameters for many missing data points
+#'
+#' @return returns a ggplot facet_wrap plot, max 4 columns, only parameters with more missing data than missingValLimit
+#' @export
+#'
+#' @examples
 missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) {
   missingData <- aso::missingDataReport(plate, plateSize)
 
@@ -13,7 +23,7 @@ missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) 
   p <- ggplot2::ggplot(dfM, ggplot2::aes(x=status,y=well_count))
   p <- p + ggplot2::geom_col() + ggplot2::facet_wrap(~parameter, ncol=4)
   p <- p + ggplot2::geom_text(ggplot2::aes(label = well_count), colour = "black")
-  p
+  return(p)
 }
 
 #' Produces a grid of plate QC views for a supplied reference plate, experimental plate

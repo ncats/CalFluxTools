@@ -14,6 +14,28 @@ addPlate <- function(plateset, plate, label) {
 }
 
 
+#' filterLowDataParameters
+#'
+#' @param plate plate on which to filter parameters with low data representation
+#' @param thresholdType one of 'well_count' or 'well_percentage'
+#' @param missingDataThreshold
+#'
+#' @return
+#' @export
+#'
+#' @examples
+filterLowDataParameters <- function(plate, thresholdType = 'well_count', missingDataThreshold = 10) {
+
+  missingData <- missingDataReport(plate)
+  missingData <- missingData[missingData$missing_count > missingDataThreshold, ]
+
+  if(nrow(missingData) > 0) {
+    paramsToDrop <- missingData$parameter
+    df <- plate@plateData[,!(names(plate@plateData) %in% paramsToDrop)]
+    plate@plateData <- df
+  }
+  return(df)
+}
 
 #' missingDataReport reports on plate missing values
 #'
@@ -36,7 +58,7 @@ missingDataReport <- function(plate, plateSize = 384) {
     df <- data.frame(lapply(df, as.numeric), check.names = F)
   )
   res <- data.frame(colSums(is.na(df)), check.names=F)
-  res2 <- data.frame(colSums(df == 0), check.names=F)
+  res2 <- data.frame(colSums(na.omit(df) == 0), check.names=F)
   res <- cbind(res, res2)
 
   res$missing_count <- res[,1] + res[,2]
