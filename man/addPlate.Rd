@@ -4,7 +4,7 @@
 \alias{addPlate}
 \title{Add a plate to a plateset}
 \usage{
-addPlate(plateset, plate)
+addPlate(plateset, plate, label)
 }
 \arguments{
 \item{plateset}{a plateset S4 bject}
