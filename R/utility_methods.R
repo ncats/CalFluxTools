@@ -20,7 +20,7 @@ addPlate <- function(plateset, plate, label) {
 #' @param thresholdType one of 'well_count' or 'well_percentage'
 #' @param missingDataThreshold
 #'
-#' @return
+#' @return a plate with updated plate data
 #' @export
 #'
 #' @examples
@@ -34,7 +34,7 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
     df <- plate@plateData[,!(names(plate@plateData) %in% paramsToDrop)]
     plate@plateData <- df
   }
-  return(df)
+  return(plate)
 }
 
 #' missingDataReport reports on plate missing values
@@ -116,6 +116,32 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
   return(plate)
 }
 
+
+harmonizeParametersAcrossPlates <- function(plateSet) {
+
+  commonParams <- c()
+  i = 1
+  for(plate in plateSet@plates) {
+    if(i == 1) {
+      commonParams <- colnames(plate@plateData)
+    } else {
+      params <- colnames(plate@plateData)
+      commonParams <- intersect(commonParams, params)
+    }
+    i = i + 1
+  }
+
+  plateSet@plateNames
+  for(name in plateSet@plateNames) {
+    plate <- plateSet@plates[[name]]
+    plate@plateData <- plate@plateData[,commonParams]
+    plate@statList <- colnames(plate@plateData)[2:ncol(plate@plateData)]
+    plateSet@plates[[name]] <- plate
+  }
+
+  return(plateSet)
+
+}
 
 
 #' Transforms plate data based on a supplied plate set with a reference.

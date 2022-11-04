@@ -30,7 +30,7 @@ missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) 
 #' and any transformations applied to the data.
 #' @param plateSet a PlateSet object containing at least one reference and one experimental treatment plate.
 #' @param platePair a vector of length 2 specifying reference and experimental plate names to QC.
-#' @param statsToPlot a vector of parameters that should be visualized.
+#' @param paramsToPlot a vector of parameters that should be visualized.
 #' @param showRowColumnLabels a boolean to show or hide plate row and column labels. Larger trellises may benefit from hiding labels.
 #' @param maxSatCount maximumn number of wells to allow color saturation in the plate heatmap. This sets color scale limits such that this number of wells saturate,
 #' evenly at both ends of the plate's value range. This reduces the effect of outliers on the color scale limits.
@@ -39,7 +39,7 @@ missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) 
 #' @param ggplot is a boolean to control if rendering is by ggplot2 or by ComplexHeatmap. Ggplot2 is the default.
 #' @param elementDividers is a boolean controling whether boarders between heatmap elements are shown or not. Larger trellises benefit from hiding these lines.
 #'
-trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, showRowColumnLabels = T,
+trellisPlateSetViewsPairViews <- function(plateSet, platePair, paramsToPlot, showRowColumnLabels = T,
                                           maxSatCount = 10, showLegend = F, tMethod = 'log2ratio',
                                           ggplot=T, elementDividers = F) {
   plotLists <- list()
@@ -47,7 +47,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, show
   firstPlate <- T
   for(plateName in platePair) {
     plate <- plateSet@plates[[plateName]]
-    pList <- aso:::trellisPlateView(plate, statsToPlot = statsToPlot, returnPlots = returnPlots,
+    pList <- aso:::trellisPlateView(plate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                               showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                               showLegend = showLegend, ggplot=ggplot, elementDividers = elementDividers,
                               plateTitle = plateName, showRowTitle = firstPlate)
@@ -64,7 +64,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, show
       tPlate <- aso:::clonePlate(plate)
       tPlate@plateData <- plateSet@transformedPlateData[[tName]]
 
-      plotLists[[tName]] <- aso:::trellisPlateView(plate = tPlate, statsToPlot = statsToPlot, returnPlots = returnPlots,
+      plotLists[[tName]] <- aso:::trellisPlateView(plate = tPlate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                                             showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                                              showLegend = T, ggplot=ggplot, elementDividers=elementDividers,
                                             scaleColors = c("green", "black", "red"), plateTitle = tName)
@@ -73,10 +73,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, show
 
   fullPlateList <- c(plotLists[[1]], plotLists[[2]], plotLists[[3]])
 
-  grid <- gridExtra::arrangeGrob(grobs=fullPlateList, widths=c(1.1,1,1.5), ncol=3, nrow=length(statsToPlot), as.table = F)
-
-#grid <- cowplot::plot_grid(plotlist = fullPlateList, ncol=3, nrow=length(statsToPlot), rel_widths = c(1,1,1.5),
-#                          rel_heights = rep(0.5, length(statsToPlot)), byrow=F)
+  grid <- gridExtra::arrangeGrob(grobs=fullPlateList, widths=c(1.1,1,1.5), ncol=3, nrow=length(paramsToPlot), as.table = F)
 
   return(grid)
 }
@@ -86,7 +83,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, show
 #' Plots plate heatmaps for one plate, for a collection of one or more statistics/parameters
 #'
 #' @param plate plate object with loaded data
-#' @param statsToPlot a vector of parameters that should be visualized.
+#' @param paramsToPlot a vector of parameters that should be visualized.
 #' @param showRowColumnLabels a boolean to show or hide plate row and column labels. Larger trellises may benefit from hiding labels.
 #' @param maxSatCount maximumn number of wells to allow color saturation in the plate heatmap. This sets color scale limits such that this number of wells saturate,
 #' evenly at both ends of the plate's value range. This reduces the effect of outliers on the color scale limits.
@@ -99,7 +96,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, statsToPlot, show
 #' @param elementDividers is a boolean controling whether boarders between heatmap elements are shown or not. Larger trellises benefit from hiding these lines.
 #' @param returnPlots if true, return a list object of ggplot tile plots for visualization, false will display plots.
 #'
-trellisPlateView <- function(plate, statsToPlot, showRowColumnLabels = T,
+trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
                              maxSatCount = 10, showLegend = F,
                              scaleColors = c("#e8eb59", "#0740fa"),
                              plateTitle = "", showRowTitle = F, rowTitle = "row", ggplot=T, elementDividers = F,
@@ -107,11 +104,11 @@ trellisPlateView <- function(plate, statsToPlot, showRowColumnLabels = T,
   pList <- list()
 
   # get the mapping from statistic to a matrix for the stat, in plate format
-  matrixMap <- aso:::rawPlateMatrixStatsToPlateFormat(plate=plate, parameter=statsToPlot)
+  matrixMap <- aso:::rawPlateMatrixStatsToPlateFormat(plate=plate, parameter=paramsToPlot)
 
   firstInList = T
 
-  for(stat in statsToPlot) {
+  for(stat in paramsToPlot) {
 
     # build a Heatmap for each statistc
     if(!ggplot) {
@@ -272,7 +269,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]
-  tPlate <- clonePlate(plate)
+  tPlate <- aso:::clonePlate(plate)
   tPlate@plateData <- plateSet@transformedPlateData[[1]]
 
   # extract the plate data for a specified sample
@@ -284,8 +281,8 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   colnames(data)[ncol(data)] <- 'val'
 
   #compute mean and SD, via dplyr
-  dataSum <- data.frame(group_by(data, Concentration) %>% summarize(m = mean(val)))
-  dataSumSD <- data.frame(group_by(data, Concentration) %>% summarize(m = sd(val)))
+  dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val)))
+  dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val)))
 
   # set conc as a factor and order levels
   dataSum$Concentration <- factor(dataSum$Concentration, levels = dataSum$Concentration[order(as.numeric(dataSum$Concentration))])
@@ -307,11 +304,13 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   #colnames(data)[ncol(data)] <- yTitle
   title <- paste0(sampleName, " -- ", parameter)
 
-  p <- ggplot(dataSum, aes(x=Concentration, y=dataSum[,2])) + geom_bar(stat='identity', color = 'blue', fill=rgb(0.1,0.4,0.5,0.7)) +
-    geom_point(data=data, aes(x=Concentration, y=data[,ncol(data)])) +
-    geom_errorbar(aes(ymin=sdLow, ymax=sdHigh), width = 0.2) +
-    theme_classic() + labs(title=title, x="Concentration", y="log2FoldChange") + geom_hline(yintercept = 0.0) +
-    theme(plot.title = element_text(hjust = 0.5))
+  p <- ggplot2::ggplot(dataSum, ggplot2::aes(x=Concentration, y=dataSum[,2])) +
+    ggplot2::geom_bar(stat='identity', color = 'blue', fill=rgb(0.1,0.4,0.5,0.7)) +
+    ggplot2::geom_point(data=data, ggplot2::aes(x=Concentration, y=data[,ncol(data)])) +
+    ggplot2::geom_errorbar(ggplot2::aes(ymin=sdLow, ymax=sdHigh), width = 0.2) +
+    ggplot2::theme_classic() + ggplot2::labs(title=title, x="Concentration", y="log2FoldChange") +
+    ggplot2::geom_hline(yintercept = 0.0) +
+    ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
 
   return(p)
 }
