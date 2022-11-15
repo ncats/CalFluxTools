@@ -102,7 +102,14 @@ gridExtra::grid.arrange(grid)
 
 <h2>Select a set of samples and plot associated bar charts covering paramsToPlot</h2>
 ```{r}
-samples <- c("ASO5","ASO6","ASO7", "Veh1")
+
+samples <- c("Veh1","Veh2")
+
+p <- aso:::getBarChartTrellis(plateSet=plateSet, samples = samples, parameters = paramsToPlot, samplesIn = 'rows', tMethod = 'log2Ratio')
+
+gridExtra::grid.arrange(p)
+
+samples <- c("ASO5","ASO3")
 
 p <- aso:::getBarChartTrellis(plateSet=plateSet, samples = samples, parameters = paramsToPlot, samplesIn = 'rows', tMethod = 'log2Ratio')
 
