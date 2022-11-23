@@ -11,6 +11,7 @@ setClass("plate", slots=list(
   plateDataMap = "list",
   plateAnnotMap = "data.frame",
   parameters = "vector",
+  paramAbbrs = "vector",
   imputationFlag = "vector",
   imputationMethod = "character",
   qualityFlags = "list"
@@ -32,7 +33,11 @@ setClass("plateset", slots=list(
 )
 )
 
-
-
+#' @export
+setClass("aso", slots=list(
+  plateSet = 'plateset',
+  parameterInfo = "data.frame",
+  methodParameters = "list"
+))
 
 

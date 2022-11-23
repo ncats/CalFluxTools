@@ -48,7 +48,7 @@ read_stemonix_data <- function(filename){
 
   colnames(plate_data_raw) <- c("well_id",stat_list)
 
-  out <- new("plate", statList = stat_list, wellIds = well_id,
+  out <- new("plate", statList = stat_list, parameters = stat_list, wellIds = well_id,
              plateData = plate_data_raw, plateId = plate_id)
   return(out)
 }
@@ -119,3 +119,78 @@ read_stemonix_metadata <- function(filename,plate){
   plate@plateAnnotMap <- raw_data
   return(plate)
 }
+
+
+#' @param filename excel aso parmeter file
+#' @return returns an aso object ready for analysis
+#' @export
+read_aso_parameter_file <- function(filename) {
+  paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
+
+  print(dim(paramsDf))
+
+  analysisDf <- openxlsx::read.xlsx(filename, sheet="Analysis_Settings", colNames = F)
+
+  print(dim(analysisDf))
+
+  aso <- parseAnalysisSettings(analysisDf)
+  aso@parameterInfo = paramsDf
+
+  return(aso)
+}
+
+
+parseAnalysisSettings <- function(analysisDf) {
+  rootDir = ""
+  plateFiles <- list()
+  plateMaps <- list()
+  analysisParams <- list()
+
+  for(i in 1:nrow(analysisDf)) {
+    if(analysisDf[i,1] == "Root_Directory") {
+      rootDir = trimws(analysisDf[i,2])
+
+      # set proper path delimiter
+      rootDir <- gsub("\\\\", "/", rootDir)
+
+      # make user we have a path delim at the end
+      rootDir <- paste0(rootDir, "/")
+
+    } else if(analysisDf[i,1] == "Plate_Label") {
+      for(j in (i+1):nrow(analysisDf)) {
+        if(analysisDf[j,1] == "Processing") {
+          i = j-1
+          break
+        } else {
+          plateFiles[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,2])
+          plateMaps[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,3])
+        }
+      }
+    } else if(analysisDf[i,1] == "Processing") {
+      analysisParams <- parseProcessingParams(analysisDf[(i+1):nrow(analysisDf),1:2])
+    }
+  }
+
+  allParamsList <- list()
+  allParamsList[['root_dir']] <- rootDir
+  allParamsList[['plate_file_list']] <- plateFiles
+  allParamsList[['plate_map_list']] <- plateMaps
+  allParamsList[['analysis_params']] <- analysisParams
+  aso = new("aso")
+  aso@methodParameters = allParamsList
+  return(aso)
+}
+
+parseProcessingParams <- function(processingDf) {
+  params <- list()
+  for(i in 1:ncol(processingDf)) {
+    key <- trimws(processingDf[i,1])
+    val <- trimws(processingDf[i,2])
+    if(key != "" && val != "") {
+      params[key] <- val
+    }
+  }
+  return(params)
+}
+
+

@@ -7,7 +7,7 @@
 addPlate(plateset, plate, label)
 }
 \arguments{
-\item{plateset}{a plateset S4 bject}
+\item{plateset}{a plateset S4 object}
 
 \item{plate}{an plate S4 object to add to the plateset}
 }

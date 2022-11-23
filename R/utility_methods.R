@@ -1,7 +1,7 @@
 
 #' Add a plate to a plateset
 #'
-#' @param plateset a plateset S4 bject
+#' @param plateset a plateset S4 object
 #' @param plate an plate S4 object to add to the plateset
 #'
 #'
@@ -103,6 +103,9 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
 
+  print(parameter)
+  print(colnames(plate@plateData))
+
   vals <- plate@plateData[,parameter]
 
   for(val in textValues) {
@@ -136,6 +139,7 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
     plate <- plateSet@plates[[name]]
     plate@plateData <- plate@plateData[,commonParams]
     plate@statList <- colnames(plate@plateData)[2:ncol(plate@plateData)]
+    plate@parameters <- colnames(plate@plateData)[2:ncol(plate@plateData)]
     plateSet@plates[[name]] <- plate
   }
 
@@ -366,6 +370,95 @@ clonePlate <- function(plate) {
   # newPlate@corrPlateData <- plate@corrPlateData
   # newPlate@correctionProcesses <- plate@correctionProcesses
   return(newPlate)
+}
+
+
+filterParametersOnList <- function(plate, paramsToKeep) {
+  df <- plate@plateData
+  print("filtering selected params...")
+
+  cnames <- colnames(df)
+
+  dnames <- setdiff(paramsToKeep, cnames)
+
+
+
+    df <- df[,paramsToKeep]
+
+  plate@plateData <- df
+  return(plate)
+}
+
+
+applyParameterAbbreviations <- function(plate, abbrInfo) {
+  df <- plate@plateData
+
+  # limit DF to statistics in the information dataframe, col 1
+  # df <- df[,abbrInfo[,1]]
+
+  params <- colnames(df)
+
+  # need to capture abbreviations in the order of the columns
+  abbrs <- c()
+  for(col in params) {
+    abbr <- abbrInfo[abbrInfo$Statistic == col,2]
+    abbrs <- c(abbrs,abbr)
+  }
+
+  # set abbrs as colnames
+  colnames(df) <- abbrs
+
+  # rebuild plate info
+  plate@parameters <- params
+  plate@statList <- params
+  plate@paramAbbrs <- abbrs
+  plate@plateData <- df
+
+  return(plate)
+}
+
+
+aucParameterPatch <- function(aso) {
+
+  # patch plate data
+  for(platename in names(aso@plateSet@plates)) {
+    i=1
+    plate <- aso@plateSet@plates[[platename]]
+    for(n in colnames(plate@plateData)) {
+      print(n)
+      if(startsWith(n, "Area Under Curve (RFU")) {
+        colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
+        plate@parameters[i] <- "Area Under Curve (RFUs)"
+        plate@statList[i] <- "Area Under Curve (RFUs)"
+      }
+      if(startsWith(n, "Area Under Curve S.D. (RFU")) {
+        colnames(plate@plateData)[i] <- "Area Under Curve S.D. (RFUs)"
+        plate@parameters[i] <- "Area Under Curve S.D. (RFUs)"
+        plate@statList[i] <- "Area Under Curve S.D. (RFUs)"
+      }
+      i = i + 1
+    }
+
+    aso@plateSet@plates[[platename]] <- plate
+  }
+
+  # patch plate info
+  pInfo <- aso@parameterInfo
+  i = 1
+  for(i in 1:nrow(pInfo)) {
+    n <- pInfo[i,1]
+    if(startsWith(n, "Area Under Curve (RFU")) {
+      pInfo[i,1] <- "Area Under Curve (RFUs)"
+    }
+    if(startsWith(n, "Area Under Curve S.D. (RFU")) {
+      pInfo[i,1] <- "Area Under Curve S.D. (RFUs)"
+    }
+    i = i + 1
+  }
+
+  aso@parameterInfo <- pInfo
+
+  return(aso)
 }
 
 
