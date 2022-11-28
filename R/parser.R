@@ -127,11 +127,11 @@ read_stemonix_metadata <- function(filename,plate){
 read_aso_parameter_file <- function(filename) {
   paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
 
-  print(dim(paramsDf))
+ #print(dim(paramsDf))
 
   analysisDf <- openxlsx::read.xlsx(filename, sheet="Analysis_Settings", colNames = F)
 
-  print(dim(analysisDf))
+  #print(dim(analysisDf))
 
   aso <- parseAnalysisSettings(analysisDf)
   aso@parameterInfo = paramsDf
@@ -142,6 +142,7 @@ read_aso_parameter_file <- function(filename) {
 
 parseAnalysisSettings <- function(analysisDf) {
   rootDir = ""
+  plateFormat = 384
   plateFiles <- list()
   plateMaps <- list()
   analysisParams <- list()
@@ -168,11 +169,14 @@ parseAnalysisSettings <- function(analysisDf) {
       }
     } else if(analysisDf[i,1] == "Processing") {
       analysisParams <- parseProcessingParams(analysisDf[(i+1):nrow(analysisDf),1:2])
+    } else if(analysisDf[i,1] == "Plate_Format") {
+      plateFormat <- as.numeric(trimws(analysisDf[i,2]))
     }
   }
 
   allParamsList <- list()
   allParamsList[['root_dir']] <- rootDir
+  allParamsList[['plate_format']] <- plateFormat
   allParamsList[['plate_file_list']] <- plateFiles
   allParamsList[['plate_map_list']] <- plateMaps
   allParamsList[['analysis_params']] <- analysisParams

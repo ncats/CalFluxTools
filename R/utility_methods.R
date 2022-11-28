@@ -103,8 +103,8 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
 
-  print(parameter)
-  print(colnames(plate@plateData))
+  #print(parameter)
+  #print(colnames(plate@plateData))
 
   vals <- plate@plateData[,parameter]
 
@@ -375,7 +375,7 @@ clonePlate <- function(plate) {
 
 filterParametersOnList <- function(plate, paramsToKeep) {
   df <- plate@plateData
-  print("filtering selected params...")
+  #print("filtering selected params...")
 
   cnames <- colnames(df)
 
@@ -425,7 +425,7 @@ aucParameterPatch <- function(aso) {
     i=1
     plate <- aso@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
-      print(n)
+      #print(n)
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
         plate@parameters[i] <- "Area Under Curve (RFUs)"

@@ -29,7 +29,8 @@ setClass("plateset", slots=list(
   plates = "list",
   plateNames = "vector",
   transformedPlateData = "list",
-  transformationNames = "vector"
+  transformationNames = "vector",
+  dataCoverageTables = "list"
 )
 )
 

@@ -25,8 +25,13 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   aso <- aso:::applyCategoricalToNumeric(aso)
 
   # assess data coverage and create optional output file for each plate.
+  aso <- aso:::assessDataCompleteness(aso)
 
   # filter parameters for low data coverage
+  aso <- aso:::applyDataCoverageFilters(aso)
+
+    # export of the data coverage tables
+  # aso:::exportDataCoverageReport(aso)
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
 
@@ -38,6 +43,7 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
 
   print("Analyis Done")
 
+  return(aso)
 }
 
 
@@ -49,11 +55,11 @@ loadPlates <- function(aso) {
   dir <- aso@methodParameters[['root_dir']]
 
   for(platename in names(fileList)) {
-    print(paste0("adding new plate with name: ",platename))
+    #print(paste0("adding new plate with name: ",platename))
     file <- fileList[[platename]]
     plate <- aso::read_stemonix_data(filename=paste0(dir,file))
     plateSet <- aso::addPlate(plateSet, plate, platename)
-    print(paste0("added plate from: ",dir,file))
+    #print(paste0("added plate from: ",dir,file))
   }
 
   # add the plateset
@@ -68,24 +74,24 @@ loadPlateMaps <- function(aso) {
 
   dir <- aso@methodParameters[['root_dir']]
 
-  writeLines("\n\n\nLoading Plate Maps")
-  print(dir)
-  writeLines("/n/n/n")
+  #writeLines("\n\n\nLoading Plate Maps")
+  #print(dir)
+  #writeLines("/n/n/n")
 
 
   for(platename in names(fileList)) {
 
     file <- fileList[[platename]]
 
-    print(paste0("platename :",platename))
-    print(paste0("map file :",file))
+    #print(paste0("platename :",platename))
+    #print(paste0("map file :",file))
 
     plate <- aso@plateSet@plates[[platename]]
 
     if(is.null(plate)) {
-      print("NULL PLATE!!!!!!!!!!!!!!!!!!!!!!!!")
+      #print("NULL PLATE!!!!!!!!!!!!!!!!!!!!!!!!")
     } else {
-      print("PLATE NOT NULL :)")
+      #print("PLATE NOT NULL :)")
     }
 
     plate <- aso:::read_stemonix_metadata(paste0(dir,file), plate)
@@ -139,7 +145,7 @@ applyCategoricalToNumeric <- function(aso) {
 
       keys <- paramsToMap[i,'cat_to_num_map']
 
-      print(keys)
+      #print(keys)
 
       keys <- unlist(strsplit(keys,split=","))
       for(j in 0:length(keys)) {
@@ -148,7 +154,7 @@ applyCategoricalToNumeric <- function(aso) {
 
       vals <- paramsToMap[i,'cat_to_num_map2']
 
-      print(vals)
+      #print(vals)
 
       vals <- unlist(strsplit(vals, split=","))
       for(k in 0:length(vals)) {
@@ -156,8 +162,8 @@ applyCategoricalToNumeric <- function(aso) {
       }
       vals <- as.numeric(vals)
 
-      print(keys)
-      print(vals)
+      #print(keys)
+      #print(vals)
       # now take care of this param on this plate
       plate <- aso::encodeDiscreteParameters(plate, abbrParam, keys, vals)
       aso@plateSet@plates[[platename]] <- plate
@@ -168,3 +174,83 @@ applyCategoricalToNumeric <- function(aso) {
   return(aso)
 
 }
+
+
+assessDataCompleteness <- function(aso) {
+  dataCoverage <- list()
+
+  plates <- aso@plateSet@plates
+  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c(1,2)]
+
+  for(platename in names(plates)) {
+    plate <- plates[[platename]]
+    missingValReport <- missingDataReport(plate=plate, plateSize=plate@format)
+
+    # lets append the parameter names
+    missingValReport <- merge(pInfo, missingValReport, by.x='Suggested_Abbreviation', by.y='parameter', all.x=F, all.y=T, sort=F)
+
+    missingValReport <- missingValReport[,c(2,1,3:(ncol(missingValReport)))]
+
+    colnames(missingValReport)[1] <- 'param_name'
+    colnames(missingValReport)[2] <- 'parameter'
+
+    dataCoverage[[platename]] <- missingValReport
+
+  }
+
+  aso@plateSet@dataCoverageTables <- dataCoverage
+
+  return(aso)
+}
+
+
+exportDataCoverageReport <- function(aso) {
+  return(aso)
+}
+
+applyDataCoverageFilters <- function(aso) {
+  # for each plate loop over paramters to check their coverage and apply limits
+
+  # get lower coverage limit for each parameter
+  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c('Statistic', 'Suggested_Abbreviation', 'Min_Data_Coverage_PCT')]
+  pSize <- aso@methodParameters[['plate_format']]
+  pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT/100.0) * pSize)
+
+  pInfo$max_data_loss <- 10
+
+  pInfo <- pInfo[,c(2,ncol(pInfo))]
+
+  plateSet <- aso@plateSet
+  dataCoverage <- plateSet@dataCoverageTables
+
+  for(n in names(dataCoverage)) {
+    print(n)
+    dcov <- dataCoverage[[n]]
+    print(colnames(dcov))
+    dcov <- merge(dcov, pInfo, by.x = 'parameter', by.y = 'Suggested_Abbreviation', sort=F)
+    print(colnames(dcov))
+    dcov$keep <- T
+    dcov$keep[dcov$missing_count > dcov$max_data_loss] <- F
+    print(colnames(dcov))
+    dataCoverage[[n]] <- dcov
+  }
+
+  aso@plateSet@dataCoverageTables <- dataCoverage
+
+  plates <- aso@plateSet@plates
+  dataCoverage <-  aso@plateSet@dataCoverageTables
+  for(platename in names(plates)) {
+    plate <- plates[[platename]]
+    dcov <- dataCoverage[[platename]]
+    colsToKeep <- unlist(dcov[dcov$keep,1])
+    plate@plateData <- plate@plateData[,colsToKeep]
+    plate@paramAbbrs <- colnames(plate@plateData)
+    plate@parameters <- dcov$param_name[dcov$keep]
+    plates[[platename]] <- plate
+  }
+
+  aso@plateSet@plates <- plates
+
+  return(aso)
+}
+
