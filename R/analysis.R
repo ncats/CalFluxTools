@@ -62,7 +62,7 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   #
   # p <- p + geom_tile()
   #
-  aso:::exportPairedTTestResult(ttDf, "file")
+  aso:::exportPairedTTestResult(aso, ttDf, "file")
 
 
 

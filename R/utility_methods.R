@@ -478,7 +478,7 @@ getPlateDataByWellSet <- function(plate, wellSet) {
   return(dataChunk)
 }
 
-exportPairedTTestResult <- function(ttestResult, fileName) {
+exportPairedTTestResult <- function(aso, ttestResult, fileName) {
   # df <- data.frame(matrix(ncol=4, nrow=0))
   # for(resName in names(ttest_result)) {
   #   res <- ttest_result[[resName]]
@@ -486,21 +486,75 @@ exportPairedTTestResult <- function(ttestResult, fileName) {
   #   resList <- list(sample=sample, condition=resName, tval=res$statistic, pval=res$p.value)
   # }
 
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
-  openxlsx::write.xlsx(list(Paired_tTest_Results=ttest_result), fileName)
+  # fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
+  # openxlsx::write.xlsx(list(Paired_tTest_Results=ttestResult), fileName)
 
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
-  tResSmall <- ttestResult[,c(1,2,4,10,9,11)]
+  tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
   tShortLFC <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='log2FoldChange')
   tShortP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='pValue')
   tShortAdjP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='adjP')
   tShortLogFDR <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='-log10(adjP)')
 
-  tPivot = tShortLFC
-  tPivot = cbind(tPivot, tShortP)
-  tPivot = cbind(tPivot, tShortAdjP)
-  tPivot = cbind(tPivot, tShortLogFDR)
+  concCount = ncol(tResSmall)-3
+  columnNames = c(colnames(tShortLFC)[1:2],rep(colnames(tShortLFC[3:ncol(tShortLFC)]),4))
 
+  tPivot = tShortLFC
+  tPivot = merge(tPivot, tShortP, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('_LFC', '_pVal'))
+  tPivot = merge(tPivot, tShortAdjP, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('', '_adjP'))
+  tPivot = merge(tPivot, tShortLogFDR, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('', '_-logFDR'))
+
+  colnames(tPivot) <- columnNames
+
+  wb <- openxlsx::createWorkbook()
+
+  ## Add a worksheet
+  openxlsx::addWorksheet(wb, "TTest_Results")
+  openxlsx::addWorksheet(wb, "TTest_Results_Tall_Format")
+
+  topHeader = c("","",rep("log2FoldChange", concCount),rep("pValue",concCount), rep("adjP",concCount), rep("-log10(adjP)",concCount))
+  openxlsx::writeData(wb, sheet=1, x=t(topHeader), startCol=1, startRow=1, rowNames=F, colNames=F)
+  openxlsx::writeData(wb, sheet=1, x=tPivot, startCol=1, startRow=2, rowNames=F, colNames=T)
+  head(openxlsx::readWorkbook(wb, sheet=1))
+
+  centerStyle <- openxlsx::createStyle(halign = "center")
+  colors = c(
+    '#D8E4BC',
+    '#C5D9F1',
+    '#CCC0DA',
+    '#D9D9D9'
+  )
+
+  startCol = 3
+  for(i in c(1:4)) {
+    centerColorStyle <- openxlsx::createStyle(halign = "center", fgFill=colors[i])
+    prevStart = startCol
+    openxlsx::mergeCells(wb, sheet=1, cols = prevStart:(prevStart+concCount-1), rows = 1)
+    openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 1, cols = prevStart)
+    openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 2, cols = prevStart:(prevStart+concCount-1))
+    #print(paste0(prevStart," to ",(prevStart + concCount)))
+    startCol = startCol + concCount
+  }
+
+  openxlsx::addStyle(wb, sheet=1, centerStyle, rows = 2, cols = 1:2)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#63BE7B','#FFEB84','#F8696B'), rows = 3:nrow(tPivot), cols = 3:(3+concCount-1))
+
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#F8696B', '#EECBC4'), rule=c(0,0.1), rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)))
+
+  emptyStyle <- openxlsx::createStyle(bgFill = "#ffffff")
+
+  openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
+                        type = "notContains", rule="", style = emptyStyle)
+
+  openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
+                                  type = "expression", rule=">0.1", style = emptyStyle)
+
+  fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
+
+  # lets add the unpivoted table
+  openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
+
+  openxlsx::saveWorkbook(wb, fileName, overwrite = T)
 
 }
