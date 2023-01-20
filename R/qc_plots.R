@@ -11,6 +11,7 @@
 #'
 #' @examples
 missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) {
+
   missingData <- aso::missingDataReport(plate, plateSize)
 
   missingData <- na.omit(missingData[missingData$good_count < (plateSize-missingValLimit),])
@@ -131,11 +132,16 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
                                            showLegend =  showLegend, elementDividers=elementDividers,
                                            scaleColors=scaleColors, showColTitle = T, xTitle = plateTitle,
                                            showRowTitle=showRowTitle, yTitle = stat)
+        if(!is.null(p)) {
+          firstInList = F
+        }
       }
-      firstInList = F
+
     }
     # add the plot to a list of plots
-    pList[[stat]] <- p
+    if(!is.null(p)) {
+      pList[[stat]] <- p
+    }
   }
 
   # show plots
@@ -187,6 +193,11 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
                                     scaleColors = c("#e8eb59", "#0740fa"), showPlateName = F,
                                     xTitle = "col", yTitle = "row") {
 
+
+  if(sum(!is.na(plateFormatData)) == 0) {
+    return(NULL)
+  }
+
   loHi <- aso:::getPlateValueCutoffs(plateFormatData, maxSaturationCount = maxSatCount)
   loEnd <- loHi[1]
   hiEnd <- loHi[2]
@@ -200,10 +211,16 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
       loEnd <- -1 * hiEnd
     } else {
       # both midpoint takes the value closes to 0
-      midPoint = loHi[which.min(abs(loHigh))]
+      midPoint = loHi[which.min(abs(loHi))]
     }
     colorLimits <- c(loEnd, hiEnd)
   }
+
+  print(plotTitle)
+  print("in ggplot plate view")
+  print(loHi)
+  print(loEnd)
+  print(hiEnd)
 
   df <- data.frame(plateFormatData, check.names = F)
   colnames(df) <- colnames(plateFormatData)
@@ -266,6 +283,8 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
 
 
 getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio') {
+
+  require('dplyr')
 
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]

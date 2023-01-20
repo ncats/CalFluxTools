@@ -123,13 +123,17 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
 harmonizeParametersAcrossPlates <- function(plateSet) {
 
   commonParams <- c()
+  commonParamNames <- c()
   i = 1
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
+      commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
+      paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
+      commonParamNames <- intersect(commonParamNames, paramNames)
     }
     i = i + 1
   }
@@ -138,8 +142,8 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   for(name in plateSet@plateNames) {
     plate <- plateSet@plates[[name]]
     plate@plateData <- plate@plateData[,commonParams]
-    plate@statList <- colnames(plate@plateData)[2:ncol(plate@plateData)]
-    plate@parameters <- colnames(plate@plateData)[2:ncol(plate@plateData)]
+    plate@statList <- colnames(plate@plateData)
+    plate@parameters <- commonParamNames
     plateSet@plates[[name]] <- plate
   }
 
@@ -158,18 +162,20 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
 #' @export
 #'
 #' @examples
-dataTransform <- function(plateSet, platePair, method = 'log2ratio',
-                          bkgrdCorr=F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2) {
+dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr = F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2) {
 
-  bkgrndCorrected = F
-
-  if(bkgrdCorr && !is.null(bkgrdSamples) && length(bkgrdSamples) > 0) {
-
-
-    bkgrndCorrected = T
-  }
+  # bkgrndCorrected = F
+  #
+  # if(bkgrdCorr && !is.null(bkgrdSamples) && length(bkgrdSamples) > 0) {
+  #
+  #
+  #   bkgrndCorrected = T
+  # }
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
+
+
+      print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!HEY  TRANSFORMING!!!!!")
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
@@ -183,7 +189,7 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio',
       suppressWarnings(
       exptData <- sapply(exptData, 'as.numeric')
       )
-      tfLabel <- paste0(platePair[2], '_vs_' , platePair[2], '_(', method, ')')
+      tfLabel <- paste0(platePair[2], '_vs_' , platePair[1], '_(', method, ')')
       if(method == 'log2ratio') {
         tfd <- data.frame(log(exptData/refData,2), check.names = F)
         plateSet@transformedPlateData[[tfLabel]] <- tfd
@@ -315,7 +321,11 @@ getRowAndColumnNames <- function(plateDim = 384) {
 #' @examples
 getPlateValueCutoffs <- function(plateMatrix, maxSaturationCount = 10) {
   vals <- unlist(plateMatrix)
+
+
+  vals[!is.finite(vals)] <- NA
   vals2 <- na.omit(vals)
+
   valSort <- sort(vals2)
   lowBall <- valSort[maxSaturationCount/2]
   hiBall <- valSort[length(valSort)-(maxSaturationCount/2)]
@@ -462,5 +472,22 @@ aucParameterPatch <- function(aso) {
 }
 
 
+getPlateDataByWellSet <- function(plate, wellSet) {
+  rows <- match(wellSet, plate@wellIds)
+  dataChunk <- plate@plateData[rows,]
+  return(dataChunk)
+}
+
+exportPairedTTestResult <- function(ttest_result, fileName) {
+  # df <- data.frame(matrix(ncol=4, nrow=0))
+  # for(resName in names(ttest_result)) {
+  #   res <- ttest_result[[resName]]
+  #   sample <- unlist(strsplit(resName,split="_"))[1]
+  #   resList <- list(sample=sample, condition=resName, tval=res$statistic, pval=res$p.value)
+  # }
 
 
+  fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
+  openxlsx::write.xlsx(list(Paired_tTest_Results=ttest_result), fileName)
+
+}

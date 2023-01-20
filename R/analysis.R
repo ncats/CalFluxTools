@@ -1,5 +1,12 @@
 
 
+analyze <- function() {
+  file <- file.choose()
+  aso:::runAnaylsis(file)
+}
+
+
+
 runAnaylsis <- function(asoParameterXlsxFilePath) {
 
   # parse parameter and analysis settings
@@ -30,16 +37,36 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # filter parameters for low data coverage
   aso <- aso:::applyDataCoverageFilters(aso)
 
-    # export of the data coverage tables
-  # aso:::exportDataCoverageReport(aso)
+  # port of the data coverage tables
+  aso:::exportDataCoverageReport(aso)
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
+  aso <- aso:::harmonizeParameters(aso)
 
   # run transformations on plate set plate-pairs
+  aso <- aso:::transformData(aso)
 
   # create optional plate view pdf.
+  aso:::exportPlateViews(aso)
 
   # create optional bar-chart
+  aso:::exportBarCharts(aso)
+
+  ttDf <- aso:::runPairedTTest(aso)
+
+
+  # ggplot2::ggplot(data=ttDf) +
+  #
+  # p <- ggplot2::ggplot(ttDf, ggplot2::aes(x=Parameter, y=c(Treatment,Conc), fill=-log10(adjP))) +
+  #   ggplot2::scale_x_discrete(position='top')
+  #
+  # p <- p + geom_tile()
+  #
+  aso:::exportPairedTTestResult(ttDf, "file")
+
+
+
+
 
   print("Analyis Done")
 
@@ -245,7 +272,7 @@ applyDataCoverageFilters <- function(aso) {
     colsToKeep <- unlist(dcov[dcov$keep,1])
     plate@plateData <- plate@plateData[,colsToKeep]
     plate@paramAbbrs <- colnames(plate@plateData)
-    plate@parameters <- dcov$param_name[dcov$keep]
+    plate@parameters <- dcov$param_name[dcov$keep == "TRUE"]
     plates[[platename]] <- plate
   }
 
@@ -253,4 +280,249 @@ applyDataCoverageFilters <- function(aso) {
 
   return(aso)
 }
+
+
+exportDataCoverageReport <- function(aso) {
+
+  print("In export data")
+  rootDir <- aso@methodParameters[['root_dir']]
+
+  fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
+
+  tabs <- aso@plateSet@dataCoverageTables
+
+  openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
+  print(paste0(rootDir,fileName))
+
+}
+
+harmonizeParameters <- function(aso) {
+  aso@plateSet <- harmonizeParametersAcrossPlates(aso@plateSet)
+  return(aso)
+}
+
+
+transformData <- function(aso) {
+
+  i = 1
+  plateNames = c()
+
+  for(plateName in names(aso@plateSet@plates)) {
+    plate <- aso@plateSet@plates[[plateName]]
+    plateNames <- c(plateNames, plateName)
+
+    if(i %% 2 == 0) {
+
+      print(plateNames)
+      aso@plateSet <- dataTransform(aso@plateSet, platePair=plateNames, method = 'log2ratio', firstDataCol = 1)
+
+      plateNames = c()
+    }
+    i = i + 1
+
+
+  }
+
+  return(aso)
+
+  #dataTransform(plateSet, platePair, method = 'log2ratio',
+  #                          bkgrdCorr=F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2)
+
+}
+
+
+exportPlateViews <- function(aso) {
+
+  plateSet <- aso@plateSet
+
+  i = 1
+  plateNames = c()
+
+  ptoPlot = c()
+
+  for(plateName in names(aso@plateSet@plates)) {
+    plate <- aso@plateSet@plates[[plateName]]
+    plateNames <- c(plateNames, plateName)
+
+    if(i %% 2 == 0) {
+
+      print(plateNames)
+
+      ptoPlot <- plate@paramAbbrs
+
+      plotgrid <- trellisPlateSetViewsPairViews(plateSet, platePair=plateNames, paramsToPlot=ptoPlot, showRowColumnLabels = F,
+                                                maxSatCount = 10, showLegend = F, tMethod = 'log2ratio',
+                                                ggplot=T, elementDividers = F)
+
+      plateNames = c()
+    }
+    i = i + 1
+
+
+  }
+
+  print("In export plate QC plots")
+
+  rootDir <- aso@methodParameters[['root_dir']]
+
+  fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
+  fileName = paste0(rootDir,fileName,".pdf")
+
+  pdf(fileName, height = length(ptoPlot)*2, width = 8.5)
+  gridExtra::grid.arrange(plotgrid)
+
+  dev.off()
+}
+
+
+exportBarCharts <- function(aso) {
+  samples <- unique(aso@plateSet@plates[[1]]@plateAnnotMap$Compound)
+  samples <- samples[samples != ""]
+
+  samples <- samples[!(samples %in% c("Veh1", "Veh2"))]
+
+
+  plateset <- aso@plateSet
+
+
+  params <- aso@plateSet@plates[[1]]@paramAbbrs
+  params <- params[c(1:4,7,11,12,13)]
+
+
+  plotgrid <- aso:::getBarChartTrellis(plateSet = plateset, samples=samples, parameters=params, samplesIn = 'rows', tMethod = 'log2Ratio')
+
+  gridDim <- dim(plotgrid)
+
+  rootDir <- aso@methodParameters[['root_dir']]
+
+  fileName = format(Sys.time(), "Sample_Bar_Charts_%Y%m%d_%H%M")
+  fileName = paste0(rootDir,fileName,".pdf")
+
+  pdf(fileName, height = gridDim[1] * 2, width = gridDim[2] * 2)
+  gridExtra::grid.arrange(plotgrid)
+  dev.off()
+}
+
+
+statAnalyis <- function(aso, analysis="paired-t-test") {
+  if(analysis == 'paired-t-test') {
+    aso = runPairedTTest(aso)
+  }
+  return(aso)
+}
+
+
+runPairedTTest <- function(aso) {
+  plateset <- aso@plateSet
+
+  plateNames <- names(plateset@plates)
+
+  if(length(plateNames) %% 2 != 0) {
+    return(aso)
+  }
+
+  results <- list()
+  lfcVals <- list()
+
+  i = 1
+
+  for(name in plateNames) {
+
+    if(i %% 2 == 1) {
+
+      refPlate <- plateset@plates[[name]]
+
+      plateMap <- plateset@plates[[1]]@plateAnnotMap
+
+      compounds <- unique(plateMap$Compound)
+      compounds <- compounds[!is.na(compounds)]
+      compounds <- compounds[compounds != ""]
+
+    } else {
+
+      exptPlate <- plateset@plates[[name]]
+
+      for(compound in compounds) {
+        currCov <- plateMap[plateMap$Compound == compound,]
+
+        concs <- unique(currCov$Concentration)
+
+        nonZero <- sum(concs != 0)
+
+        if(nonZero == 0) {
+          next
+        }
+
+        concs <- concs[concs != 0]
+
+        for(conc in concs) {
+          wells <- currCov[currCov$Concentration == conc,]$Well
+          refData <- aso:::getPlateDataByWellSet(plate = refPlate, wells)
+          exptData <- aso:::getPlateDataByWellSet(plate = exptPlate, wells)
+
+          if(ncol(refData) != ncol(exptData)) {
+            next
+          }
+
+          for(param in colnames(refData)) {
+            d1 <- refData[,param]
+            d2 <- exptData[,param]
+
+            data <- data.frame(d1)
+            data$d2 <- d2
+
+            # need to convert to numeric
+            data <- data.frame(lapply(data, FUN=as.numeric))
+
+            data <- na.omit(data)
+
+            lfc <- log(mean(data[,2],na.rm=T)/mean(data[,1], na.rm=T),2)
+
+
+            if(nrow(data) > 2) {
+
+              res <- t.test(x=data[,2], y=data[,1], paired = TRUE, alternative = "two.sided")
+              #print(paste0(compound," ",conc," ",param))
+              #print(data)
+              #print(res)
+              resultName <- paste0(compound,"_",conc,"_",param)
+              results[[resultName]] <- res
+              lfcVals[[resultName]] <- lfc
+            }
+
+          }
+        }
+      }
+    }
+
+    i = i + 1
+  }
+
+  df <- data.frame(matrix(ncol=9, nrow=0))
+  for(resName in names(results)) {
+    res <- results[[resName]]
+    nameVals <- unlist(strsplit(resName,split="_"))
+    sample <- nameVals[1]
+    dose <- nameVals[2]
+    param <- paste(nameVals[3:length(nameVals)], collapse="_")
+    lfc <- lfcVals[[resName]]
+    resList <- list(sample=sample, dose=dose, treatment=paste0(sample,'_',dose), param=param, condition=resName, method=res$method, tval=res$statistic, pval=res$p.value, log2FoldChange=lfc)
+    df <- rbind(df,resList)
+  }
+  colnames(df) <- c("Sample", "Conc", "Treatment", "Parameter", "Condition", "TestMethod", "T", "pValue", "log2FoldChange")
+
+  df <- df[order(df$pValue),]
+  df$adjP <- p.adjust(unlist(df$pValue), method="BH")
+
+  df$Conc <- as.numeric(df$Conc)
+
+  df <- df[order(df$Sample, df$Parameter, df$Conc),]
+
+  # add -log(adjP)
+  df$`-log10(adjP)` <- -1*log(df$adjP,10)
+
+  return(df)
+}
+
+
 
