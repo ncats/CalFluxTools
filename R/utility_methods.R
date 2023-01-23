@@ -58,7 +58,7 @@ missingDataReport <- function(plate, plateSize = 384) {
     df <- data.frame(lapply(df, as.numeric), check.names = F)
   )
   res <- data.frame(colSums(is.na(df)), check.names=F)
-  res2 <- data.frame(colSums(na.omit(df) == 0), check.names=F)
+  res2 <- data.frame(colSums(df==0, na.rm=T), check.names=F)
   res <- cbind(res, res2)
 
   res$missing_count <- res[,1] + res[,2]
@@ -174,8 +174,6 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
 
-
-      print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!HEY  TRANSFORMING!!!!!")
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
@@ -393,7 +391,7 @@ filterParametersOnList <- function(plate, paramsToKeep) {
 
 
 
-    df <- df[,paramsToKeep]
+  df <- df[,paramsToKeep]
 
   plate@plateData <- df
   return(plate)
@@ -558,3 +556,6 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
   openxlsx::saveWorkbook(wb, fileName, overwrite = T)
 
 }
+
+
+

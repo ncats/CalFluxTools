@@ -54,19 +54,7 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
 
   ttDf <- aso:::runPairedTTest(aso)
 
-
-  # ggplot2::ggplot(data=ttDf) +
-  #
-  # p <- ggplot2::ggplot(ttDf, ggplot2::aes(x=Parameter, y=c(Treatment,Conc), fill=-log10(adjP))) +
-  #   ggplot2::scale_x_discrete(position='top')
-  #
-  # p <- p + geom_tile()
-  #
   aso:::exportPairedTTestResult(aso, ttDf, "file")
-
-
-
-
 
   print("Analyis Done")
 
@@ -101,17 +89,9 @@ loadPlateMaps <- function(aso) {
 
   dir <- aso@methodParameters[['root_dir']]
 
-  #writeLines("\n\n\nLoading Plate Maps")
-  #print(dir)
-  #writeLines("/n/n/n")
-
-
   for(platename in names(fileList)) {
 
     file <- fileList[[platename]]
-
-    #print(paste0("platename :",platename))
-    #print(paste0("map file :",file))
 
     plate <- aso@plateSet@plates[[platename]]
 
@@ -142,6 +122,11 @@ setParameterAbbreviaions <- function(aso) {
 }
 
 
+####################
+#####
+##### high level methods working on the ASO object
+#####
+####################
 
 fiterToSelectedParameters <- function(aso) {
 
@@ -160,6 +145,7 @@ fiterToSelectedParameters <- function(aso) {
 applyCategoricalToNumeric <- function(aso) {
 
   print("categorical to numeric parameters")
+
   # get parameters to convert
   paramsToMap <- aso@parameterInfo[!is.na(aso@parameterInfo$cat_to_num_map),]
 
@@ -172,8 +158,6 @@ applyCategoricalToNumeric <- function(aso) {
 
       keys <- paramsToMap[i,'cat_to_num_map']
 
-      #print(keys)
-
       keys <- unlist(strsplit(keys,split=","))
       for(j in 0:length(keys)) {
         keys[j] <- trimws(keys[j])
@@ -181,25 +165,18 @@ applyCategoricalToNumeric <- function(aso) {
 
       vals <- paramsToMap[i,'cat_to_num_map2']
 
-      #print(vals)
-
       vals <- unlist(strsplit(vals, split=","))
       for(k in 0:length(vals)) {
         vals[j] <- trimws(vals[j])
       }
       vals <- as.numeric(vals)
 
-      #print(keys)
-      #print(vals)
-      # now take care of this param on this plate
       plate <- aso::encodeDiscreteParameters(plate, abbrParam, keys, vals)
       aso@plateSet@plates[[platename]] <- plate
     }
-
   }
 
   return(aso)
-
 }
 
 
@@ -221,8 +198,9 @@ assessDataCompleteness <- function(aso) {
     colnames(missingValReport)[1] <- 'param_name'
     colnames(missingValReport)[2] <- 'parameter'
 
-    dataCoverage[[platename]] <- missingValReport
+    #missingValReport <- subset(missingValReport, select=-c(Statistic))
 
+    dataCoverage[[platename]] <- missingValReport
   }
 
   aso@plateSet@dataCoverageTables <- dataCoverage
@@ -230,10 +208,6 @@ assessDataCompleteness <- function(aso) {
   return(aso)
 }
 
-
-exportDataCoverageReport <- function(aso) {
-  return(aso)
-}
 
 applyDataCoverageFilters <- function(aso) {
   # for each plate loop over paramters to check their coverage and apply limits
@@ -243,22 +217,27 @@ applyDataCoverageFilters <- function(aso) {
   pSize <- aso@methodParameters[['plate_format']]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT/100.0) * pSize)
 
-  pInfo$max_data_loss <- 10
+  # pInfo$max_data_loss <- 10
 
-  pInfo <- pInfo[,c(2,ncol(pInfo))]
+  #pInfo <- pInfo[,c(2,ncol(pInfo))]
 
   plateSet <- aso@plateSet
   dataCoverage <- plateSet@dataCoverageTables
 
   for(n in names(dataCoverage)) {
-    print(n)
+    #print(n)
     dcov <- dataCoverage[[n]]
-    print(colnames(dcov))
+    #print(colnames(dcov))
     dcov <- merge(dcov, pInfo, by.x = 'parameter', by.y = 'Suggested_Abbreviation', sort=F)
-    print(colnames(dcov))
+    #print(colnames(dcov))
     dcov$keep <- T
     dcov$keep[dcov$missing_count > dcov$max_data_loss] <- F
-    print(colnames(dcov))
+    #print(colnames(dcov))
+
+    if('Statistic' %in% colnames(dcov)) {
+      dcov <- subset(dcov, select=c(-Statistic))
+    }
+
     dataCoverage[[n]] <- dcov
   }
 
@@ -284,15 +263,11 @@ applyDataCoverageFilters <- function(aso) {
 
 exportDataCoverageReport <- function(aso) {
 
-  print("In export data")
   rootDir <- aso@methodParameters[['root_dir']]
-
   fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
-
   tabs <- aso@plateSet@dataCoverageTables
 
   openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
-  print(paste0(rootDir,fileName))
 
 }
 
@@ -324,10 +299,6 @@ transformData <- function(aso) {
   }
 
   return(aso)
-
-  #dataTransform(plateSet, platePair, method = 'log2ratio',
-  #                          bkgrdCorr=F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2)
-
 }
 
 
@@ -361,8 +332,6 @@ exportPlateViews <- function(aso) {
 
   }
 
-  print("In export plate QC plots")
-
   rootDir <- aso@methodParameters[['root_dir']]
 
   fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
@@ -379,20 +348,18 @@ exportBarCharts <- function(aso) {
   samples <- unique(aso@plateSet@plates[[1]]@plateAnnotMap$Compound)
   samples <- samples[samples != ""]
 
+  ### need to refer to input for control compound name/tag
   samples <- samples[!(samples %in% c("Veh1", "Veh2"))]
 
+  # need to adjust to work over multiple plate pairs in plate set...
 
   plateset <- aso@plateSet
-
-
-  params <- aso@plateSet@plates[[1]]@paramAbbrs
-  params <- params[c(1:4,7,11,12,13)]
+  params <- colnames(aso@plateSet@transformedPlateData[[1]])
 
 
   plotgrid <- aso:::getBarChartTrellis(plateSet = plateset, samples=samples, parameters=params, samplesIn = 'rows', tMethod = 'log2Ratio')
 
   gridDim <- dim(plotgrid)
-
   rootDir <- aso@methodParameters[['root_dir']]
 
   fileName = format(Sys.time(), "Sample_Bar_Charts_%Y%m%d_%H%M")
@@ -478,13 +445,9 @@ runPairedTTest <- function(aso) {
 
             lfc <- log(mean(data[,2],na.rm=T)/mean(data[,1], na.rm=T),2)
 
-
             if(nrow(data) > 2) {
 
               res <- t.test(x=data[,2], y=data[,1], paired = TRUE, alternative = "two.sided")
-              #print(paste0(compound," ",conc," ",param))
-              #print(data)
-              #print(res)
               resultName <- paste0(compound,"_",conc,"_",param)
               results[[resultName]] <- res
               lfcVals[[resultName]] <- lfc

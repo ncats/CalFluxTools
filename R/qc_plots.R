@@ -216,12 +216,6 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
     colorLimits <- c(loEnd, hiEnd)
   }
 
-  print(plotTitle)
-  print("in ggplot plate view")
-  print(loHi)
-  print(loEnd)
-  print(hiEnd)
-
   df <- data.frame(plateFormatData, check.names = F)
   colnames(df) <- colnames(plateFormatData)
   rownames(df) <- rownames(plateFormatData)
@@ -356,6 +350,14 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
 
   return(grid)
 }
+
+
+getParameterCorrelationMatrix <- function(aso) {
+  tPlateData = data.frame(aso@plateSet@transformedPlateData)
+  corrMat <- cor(tPlateData, use = 'pairwise.complete', method = 'pearson')
+  corrP <- corrplot::corrplot(tPlateData)
+
+  }
 
 
 
