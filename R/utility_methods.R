@@ -37,6 +37,25 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
   return(plate)
 }
 
+
+
+imputePercentMin <- function(plateSet, pctMin = 0.1) {
+  plates <- plateSet@plates
+
+  for(plate in plates) {
+    data <- plate@plateData
+
+    d2 <- sapply(data, FUN=as.numeric, axis=1)
+
+    d2 <- data.frame(d2)
+
+    sapply(d2, axix=1, FUN=min)
+
+  }
+}
+
+
+
 #' missingDataReport reports on plate missing values
 #'
 #' @param plate ASO plate
@@ -104,7 +123,11 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
   i = 1
 
   #print(parameter)
-  #print(colnames(plate@plateData))
+
+  print(colnames(plate@plateData))
+  print(parameter)
+  print(textValues)
+  print(numericValues)
 
   vals <- plate@plateData[,parameter]
 
@@ -128,15 +151,24 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
+      print("initial common params")
+      print(commonParams)
       commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
+      print("other params")
+      print(params)
       paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
       commonParamNames <- intersect(commonParamNames, paramNames)
     }
     i = i + 1
   }
+
+  print("Harmonizing.... common params")
+
+  print("Common params:")
+  print(commonParams)
 
   plateSet@plateNames
   for(name in plateSet@plateNames) {
@@ -177,9 +209,13 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
+      print("hey in data transform")
+
       # plateData may include wellIds in first column, so for numeric transformation, we need to skip first column using firstDataCol
       refData <- refPlate@plateData[,firstDataCol:ncol(refPlate@plateData)]
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
+
+      print("Have ref and expt data")
 
       suppressWarnings(
       refData <- sapply(refData, 'as.numeric')
@@ -548,12 +584,31 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
   openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
                                   type = "expression", rule=">0.1", style = emptyStyle)
 
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
+  fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
+  fileName <- paste0(aso@methodParameters[['root_dir']], "/", fileName)
 
   # lets add the unpivoted table
   openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
 
   openxlsx::saveWorkbook(wb, fileName, overwrite = T)
+
+}
+
+
+exportTransformedData <- function(aso) {
+
+  data <- data.frame(aso@plateSet@transformedPlateData[[1]])
+
+  wellAnn <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  data <- cbind(wellAnn, data)
+
+  dataList <- list()
+  dataList[['Transformed_Data']] <- data
+
+  fileName <- paste0("Transformed_Plate_Data_",format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx")
+
+  openxlsx::write.xlsx(dataList, file=fileName)
 
 }
 

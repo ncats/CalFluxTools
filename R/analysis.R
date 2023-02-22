@@ -31,11 +31,16 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # apply value imputations and make categorical results numeric - if specified
   aso <- aso:::applyCategoricalToNumeric(aso)
 
+  print("HEYYYYY before assessDataCompleteness")
+
   # assess data coverage and create optional output file for each plate.
   aso <- aso:::assessDataCompleteness(aso)
 
   # filter parameters for low data coverage
   aso <- aso:::applyDataCoverageFilters(aso)
+
+  print("data dim after filters...")
+  print(dim(aso@plateSet@plates[[1]]@plateData))
 
   # port of the data coverage tables
   aso:::exportDataCoverageReport(aso)
@@ -43,9 +48,18 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
   aso <- aso:::harmonizeParameters(aso)
 
+  print("data dim after Harmonize...")
+  print(dim(aso@plateSet@plates[[1]]@plateData))
+
+
+  print("before transform")
+
   # run transformations on plate set plate-pairs
   aso <- aso:::transformData(aso)
 
+  print("after transform")
+
+  print("before export plate views")
   # create optional plate view pdf.
   aso:::exportPlateViews(aso)
 
@@ -57,6 +71,8 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   aso:::exportPairedTTestResult(aso, ttDf, "file")
 
   print("Analyis Done")
+
+  aso:::exportTransformedData(aso)
 
   return(aso)
 }
@@ -149,10 +165,18 @@ applyCategoricalToNumeric <- function(aso) {
   # get parameters to convert
   paramsToMap <- aso@parameterInfo[!is.na(aso@parameterInfo$cat_to_num_map),]
 
+  print(dim(paramsToMap))
+  print("params to map..")
+  print(paramsToMap)
+
   for(platename in names(aso@plateSet@plates)) {
+
+    print("Plate Name To Process")
+    print(platename)
+
     plate <- aso@plateSet@plates[[platename]]
 
-    for(i in 0:nrow(paramsToMap)) {
+    for(i in 1:nrow(paramsToMap)) {
 
       abbrParam <- paramsToMap[i,2]
 
@@ -185,6 +209,9 @@ assessDataCompleteness <- function(aso) {
 
   plates <- aso@plateSet@plates
   pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c(1,2)]
+
+  print("pInfo... use params for assessments...data cov")
+  print(dim(pInfo))
 
   for(platename in names(plates)) {
     plate <- plates[[platename]]
@@ -356,7 +383,6 @@ exportBarCharts <- function(aso) {
   plateset <- aso@plateSet
   params <- colnames(aso@plateSet@transformedPlateData[[1]])
 
-
   plotgrid <- aso:::getBarChartTrellis(plateSet = plateset, samples=samples, parameters=params, samplesIn = 'rows', tMethod = 'log2Ratio')
 
   gridDim <- dim(plotgrid)
@@ -446,10 +472,27 @@ runPairedTTest <- function(aso) {
             lfc <- log(mean(data[,2],na.rm=T)/mean(data[,1], na.rm=T),2)
 
             if(nrow(data) > 2) {
-
-              res <- t.test(x=data[,2], y=data[,1], paired = TRUE, alternative = "two.sided")
               resultName <- paste0(compound,"_",conc,"_",param)
-              results[[resultName]] <- res
+
+              # if(resultName == 'ASO1_30_PkRate') {
+              #   print(resultName)
+              #   print(data)
+              #   print(lfc)
+              # }
+
+              # all 0 is ok by paired ttest.
+              # but 0 variance is not tolerated well
+              if(sum(data) == 0 || !(sd(data[,2]-data[,1]) == 0)) {
+                res <- t.test(x=data[,2], y=data[,1], paired = TRUE, alternative = "two.sided")
+                results[[resultName]] <- res
+              } else {
+                ## equal variance case ...create result with NA values
+                res <- list()
+                res[['method']] <- 'paired.ttest.0.vaiance'
+                res[['statistic']] <- NaN
+                res[['p.value']] <- NaN
+                results[[resultName]] <- data.frame(res)
+              }
               lfcVals[[resultName]] <- lfc
             }
 
@@ -464,6 +507,7 @@ runPairedTTest <- function(aso) {
   df <- data.frame(matrix(ncol=9, nrow=0))
   for(resName in names(results)) {
     res <- results[[resName]]
+    #print(res)
     nameVals <- unlist(strsplit(resName,split="_"))
     sample <- nameVals[1]
     dose <- nameVals[2]
