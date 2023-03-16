@@ -187,7 +187,7 @@ parseAnalysisSettings <- function(analysisDf) {
 
 parseProcessingParams <- function(processingDf) {
   params <- list()
-  for(i in 1:ncol(processingDf)) {
+  for(i in 1:nrow(processingDf)) {
     key <- trimws(processingDf[i,1])
     val <- trimws(processingDf[i,2])
     if(key != "" && val != "") {

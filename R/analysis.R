@@ -31,8 +31,6 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # apply value imputations and make categorical results numeric - if specified
   aso <- aso:::applyCategoricalToNumeric(aso)
 
-  print("HEYYYYY before assessDataCompleteness")
-
   # assess data coverage and create optional output file for each plate.
   aso <- aso:::assessDataCompleteness(aso)
 
@@ -51,6 +49,8 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   print("data dim after Harmonize...")
   print(dim(aso@plateSet@plates[[1]]@plateData))
 
+  # now impute existing missing data as specified in input parameters
+  aso <- aso:::imputeData(aso)
 
   print("before transform")
 
@@ -303,6 +303,27 @@ harmonizeParameters <- function(aso) {
   return(aso)
 }
 
+imputeData <- function(aso) {
+  params <- aso@methodParameters$analysis_params
+  impMethod <- params[['Imputation_Method']]
+  if(impMethod == 'per_param_pct_min') {
+    fractionMin = as.numeric(params[['Imputation_Fraction_Min']])
+    imputeCols <- aso:::getColumnAbbrToImpute(aso)
+    aso@plateSet <- aso:::imputePercentMin(aso@plateSet, pctMin = fractionMin, imputeCols)
+  }
+  return(aso)
+}
+
+getColumnAbbrToImpute <- function(aso) {
+  pInfo <- aso@parameterInfo
+  zeroReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$Zero_Replace == 1]
+  naReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$NA_Replace == 1]
+  imputeCols <- list()
+  imputeCols[['zero_impute']] <- zeroReplaceCols
+  imputeCols[['na_impute']] <- naReplaceCols
+  return(imputeCols)
+}
+
 
 transformData <- function(aso) {
 
@@ -474,15 +495,8 @@ runPairedTTest <- function(aso) {
             if(nrow(data) > 2) {
               resultName <- paste0(compound,"_",conc,"_",param)
 
-              # if(resultName == 'ASO1_30_PkRate') {
-              #   print(resultName)
-              #   print(data)
-              #   print(lfc)
-              # }
-
-              # all 0 is ok by paired ttest.
-              # but 0 variance is not tolerated well
-              if(sum(data) == 0 || !(sd(data[,2]-data[,1]) == 0)) {
+              # 0 variance is not tolerated well
+              if(!(sd(data[,2]-data[,1]) == 0)) {
                 res <- t.test(x=data[,2], y=data[,1], paired = TRUE, alternative = "two.sided")
                 results[[resultName]] <- res
               } else {

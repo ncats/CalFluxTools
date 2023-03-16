@@ -39,20 +39,51 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
 
 
 
-imputePercentMin <- function(plateSet, pctMin = 0.1) {
+imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   plates <- plateSet@plates
 
-  for(plate in plates) {
+  for(plateName in names(plates)) {
+    plate <- plates[[plateName]]
     data <- plate@plateData
 
     d2 <- sapply(data, FUN=as.numeric, axis=1)
 
     d2 <- data.frame(d2)
 
-    sapply(d2, axix=1, FUN=min)
+    # does this ignore NaNs
+    minVal <- sapply(d2, axix=1, FUN=min, c(na.rm=T))
 
+    for(col in 1:ncol(d2)) {
+      colName <- colnames(d2)[col]
+      d <- na.omit(unlist(d2[,col]))
+      d <- d[d!=0]
+      min <- min(d)
+      repVal <- min * pctMin
+
+      colData <- unlist(d2[,col])
+
+      if(colName %in% colsToImpute$na_impute) {
+        colData[is.na(colData)] <- repVal
+      }
+
+      if(colName %in% colsToImpute$zero_impute) {
+        colData[colData == 0.0] <- repVal
+      }
+
+      d2[,col] <- colData
+    }
+
+    # put the updated plate data back...
+    plate@plateData <- d2
+    plates[[plateName]] <- plate
   }
+  # drop in the modified plates with mods to plateData
+  plateSet@plates <- plates
+
+  return(plateSet)
 }
+
+
 
 
 
