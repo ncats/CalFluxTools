@@ -22,6 +22,9 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # allParamsList['plate_map_list'] <- plateMaps
   aso <- aso:::loadPlateMaps(aso)
 
+  # just convert values for empty wells to 'Emtpy'. These will change to NA when set to numeric
+  aso <- aso:::maskEmptyWells(aso)
+
   # filter to only specified parameters
   aso <- aso:::fiterToSelectedParameters(aso)
 
@@ -37,11 +40,14 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   # filter parameters for low data coverage
   aso <- aso:::applyDataCoverageFilters(aso)
 
-  print("data dim after filters...")
-  print(dim(aso@plateSet@plates[[1]]@plateData))
+  # print("data dim after filters...")
+  # print(dim(aso@plateSet@plates[[1]]@plateData))
 
   # port of the data coverage tables
   aso:::exportDataCoverageReport(aso)
+
+  # apply optional N/A and blank value replacements
+  aso <- aso:::replaceBlanksAndNAValues(aso)
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
   aso <- aso:::harmonizeParameters(aso)
@@ -50,7 +56,8 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   print(dim(aso@plateSet@plates[[1]]@plateData))
 
   # now impute existing missing data as specified in input parameters
-  aso <- aso:::imputeData(aso)
+  # for now, drop standard impute function
+  # aso <- aso:::imputeData(aso)
 
   print("before transform")
 
@@ -144,6 +151,21 @@ setParameterAbbreviaions <- function(aso) {
 #####
 ####################
 
+maskEmptyWells <- function(aso) {
+
+  for(plateName in names(aso@plateSet@plates)) {
+    plate <- aso@plateSet@plates[[plateName]]
+    plateMap <- plate@plateAnnotMap
+    df <- plate@plateData
+    df[plateMap$Compound == "Empty",] <- "Empty"
+    plate@plateData <- df
+    aso@plateSet@plates[[plateName]] <- plate
+  }
+  return(aso)
+}
+
+
+
 fiterToSelectedParameters <- function(aso) {
 
   pInfo <- aso@parameterInfo
@@ -204,6 +226,25 @@ applyCategoricalToNumeric <- function(aso) {
 }
 
 
+replaceBlanksAndNAValues <- function(aso) {
+
+  paramInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, ]
+  naParams <- paramInfo[paramInfo$NA_Replace != 'N',]
+  naParamList <- naParams$NA_Replace
+  names(naParamList) <- naParams$Suggested_Abbreviation
+
+
+  blankParams <- paramInfo[paramInfo$Blank_Replace != 'N',]
+  blankParamList <- blankParams$Blank_Replace
+  names(blankParamList) <- blankParams$Suggested_Abbreviation
+
+  refinedPlateSet <- replaceBlanksAndNAs(aso@plateSet, blankParamList, naParamList)
+  aso@plateSet <- refinedPlateSet
+
+  return(aso)
+}
+
+
 assessDataCompleteness <- function(aso) {
   dataCoverage <- list()
 
@@ -218,12 +259,12 @@ assessDataCompleteness <- function(aso) {
     missingValReport <- missingDataReport(plate=plate, plateSize=plate@format)
 
     # lets append the parameter names
-    missingValReport <- merge(pInfo, missingValReport, by.x='Suggested_Abbreviation', by.y='parameter', all.x=F, all.y=T, sort=F)
+    missingValReport <- merge(pInfo, missingValReport, by.x='Suggested_Abbreviation', by.y='Parameter', all.x=F, all.y=T, sort=F)
 
     missingValReport <- missingValReport[,c(2,1,3:(ncol(missingValReport)))]
 
-    colnames(missingValReport)[1] <- 'param_name'
-    colnames(missingValReport)[2] <- 'parameter'
+    colnames(missingValReport)[1] <- 'Param_Name'
+    colnames(missingValReport)[2] <- 'Parameter'
 
     #missingValReport <- subset(missingValReport, select=-c(Statistic))
 
@@ -241,7 +282,9 @@ applyDataCoverageFilters <- function(aso) {
 
   # get lower coverage limit for each parameter
   pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c('Statistic', 'Suggested_Abbreviation', 'Min_Data_Coverage_PCT')]
-  pSize <- aso@methodParameters[['plate_format']]
+
+  # pSize (plate size) has to be reduced to the number of non-empty wells.
+  pSize <- aso@plateSet@dataCoverageTables[[1]]$Nonempty_Wells[1]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT/100.0) * pSize)
 
   # pInfo$max_data_loss <- 10
@@ -255,10 +298,10 @@ applyDataCoverageFilters <- function(aso) {
     #print(n)
     dcov <- dataCoverage[[n]]
     #print(colnames(dcov))
-    dcov <- merge(dcov, pInfo, by.x = 'parameter', by.y = 'Suggested_Abbreviation', sort=F)
+    dcov <- merge(dcov, pInfo, by.x = 'Parameter', by.y = 'Suggested_Abbreviation', sort=F)
     #print(colnames(dcov))
     dcov$keep <- T
-    dcov$keep[dcov$missing_count > dcov$max_data_loss] <- F
+    dcov$keep[dcov$Missing_Count > dcov$max_data_loss] <- F
     #print(colnames(dcov))
 
     if('Statistic' %in% colnames(dcov)) {
@@ -278,7 +321,7 @@ applyDataCoverageFilters <- function(aso) {
     colsToKeep <- unlist(dcov[dcov$keep,1])
     plate@plateData <- plate@plateData[,colsToKeep]
     plate@paramAbbrs <- colnames(plate@plateData)
-    plate@parameters <- dcov$param_name[dcov$keep == "TRUE"]
+    plate@parameters <- dcov$Param_Name[dcov$keep == TRUE]
     plates[[platename]] <- plate
   }
 
@@ -451,6 +494,7 @@ runPairedTTest <- function(aso) {
       compounds <- unique(plateMap$Compound)
       compounds <- compounds[!is.na(compounds)]
       compounds <- compounds[compounds != ""]
+      compounds <- compounds[compounds != "Empty"]
 
     } else {
 
@@ -490,7 +534,16 @@ runPairedTTest <- function(aso) {
 
             data <- na.omit(data)
 
-            lfc <- log(mean(data[,2],na.rm=T)/mean(data[,1], na.rm=T),2)
+            meanExpt = mean(data[,2], na.rm=T) + 0.001
+            meanRef = mean(data[,1], na.rm=T) + 0.001
+            if(is.na(meanExpt)) {
+              meanExpt = 0.001
+            }
+            if(is.na(meanRef)) {
+              meanRef = 0.001
+            }
+
+            lfc <- log(mean(data[,2]+0.001,na.rm=T)/mean(data[,1]+0.001, na.rm=T),2)
 
             if(nrow(data) > 2) {
               resultName <- paste0(compound,"_",conc,"_",param)

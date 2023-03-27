@@ -38,6 +38,54 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
 }
 
 
+replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
+
+  #plateSet <- aso@plateSet
+  #blankReplacements <- blankParamsList
+  #naReplacements <- naParamList
+
+  # run replacement for each plate
+  # extract plate data for the plate
+  # for each column name in replacment map, drop in value for blank or na relapcements as specified
+
+  for(plateName in names(plateSet@plates)) {
+    plate <- plateSet@plates[[plateName]]
+    df = plate@plateData
+
+    if(length(blankReplacements) > 0) {
+      for(blankCol in names(blankReplacements)) {
+
+        repVal = blankReplacements[[blankCol]]
+
+        if(blankCol %in% colnames(df)) {
+          vals <- df[[blankCol]]
+          vals[vals == "Blank"] <- repVal
+
+          df[[blankCol]] <- vals
+        }
+      }
+    }
+
+    if(length(naReplacements) > 0) {
+      for(naCol in names(naReplacements)) {
+        repVal = naReplacements[[naCol]]
+
+        if(naCol %in% colnames(df)) {
+          vals <- df[[naCol]]
+          vals[vals == "N/A"] <- repVal
+
+          df[[naCol]] <- vals
+        }
+      }
+    }
+
+    plate@plateData <- df
+    plateSet@plates[[plateName]] <- plate
+  }
+
+  return(plateSet)
+}
+
 
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   plates <- plateSet@plates
@@ -104,20 +152,25 @@ missingDataReport <- function(plate, plateSize = 384) {
   }
 
   # coerce NA for non-numeric data
-  suppressWarnings(
-    df <- data.frame(lapply(df, as.numeric), check.names = F)
-  )
-  res <- data.frame(colSums(is.na(df)), check.names=F)
-  res2 <- data.frame(colSums(df==0, na.rm=T), check.names=F)
+  #suppressWarnings(
+  #  df <- data.frame(lapply(df, as.numeric), check.names = F)
+  #)
+  res <- data.frame(colSums(df == "N/A"), check.names=F)
+  res2 <- data.frame(colSums(df == "Blank"), check.names=F)
   res <- cbind(res, res2)
 
-  res$missing_count <- res[,1] + res[,2]
-  res$good_count <- 384 - res$missing_count
-  res$parameter <- rownames(res)
+  colnames(res) <- c("NA_Count", "Blank_Count")
 
-  res <- res[,c(5,4,3,1,2)]
+  res$Missing_Count <- res[,1] + res[,2]
+  res$Well_Count <- 384
+  res$Empty_Wells <- colSums(df == "Empty")
+  res$Nonempty_Wells <- res$Well_Count - res$Empty_Wells
+  res$Good_Count <- res$Nonempty_Wells - res$Missing_Count
+  res$Parameter <- rownames(res)
 
-  colnames(res) <- c("parameter", "good_count", "missing_count", "na_count", "zero_count")
+  res <- res[,c(8,4,5,6,1,2,3,7)]
+
+  #colnames(res) <- c("parameter", "good_count", "missing_count", "na_count", "zero_count")
 
   return(res)
 }
@@ -256,6 +309,8 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       )
       tfLabel <- paste0(platePair[2], '_vs_' , platePair[1], '_(', method, ')')
       if(method == 'log2ratio') {
+        exptData <- exptData + 0.001
+        refData <- refData + 0.001
         tfd <- data.frame(log(exptData/refData,2), check.names = F)
         plateSet@transformedPlateData[[tfLabel]] <- tfd
         plateSet@transformationNames <- c(plateSet@transformationNames, tfLabel)
