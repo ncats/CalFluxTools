@@ -55,6 +55,7 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   print("data dim after Harmonize...")
   print(dim(aso@plateSet@plates[[1]]@plateData))
 
+  aso <- aso:::runQcForReferencePlate(aso)
   # now impute existing missing data as specified in input parameters
   # for now, drop standard impute function
   # aso <- aso:::imputeData(aso)
@@ -343,6 +344,11 @@ exportDataCoverageReport <- function(aso) {
 
 harmonizeParameters <- function(aso) {
   aso@plateSet <- harmonizeParametersAcrossPlates(aso@plateSet)
+  return(aso)
+}
+
+runQcForReferencePlate <- function(aso) {
+  runReferenceQC(aso@plateSet, aso@methodParameters$root_dir, aso@methodParameters$plate_file_list[[1]])
   return(aso)
 }
 

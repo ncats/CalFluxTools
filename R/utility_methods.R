@@ -86,12 +86,140 @@ replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
   return(plateSet)
 }
 
+runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
+  refPlate <- plateSet@plates[[1]]
+
+  df <- refPlate@plateData
+  df <- sapply(df, as.numeric)
+  means <- colMeans(na.omit(df))
+  sds <- apply(na.omit(df), FUN=sd, MARGIN=2)
+  cvs <- sds/means
+
+  zDf <- sweep(df,2,means)
+  zDf <- sweep(zDf,2,sds, FUN='/')
+  zDf <- data.frame(zDf)
+
+  colNames = colnames(zDf)
+  zMats <- list()
+  aveMat <- ""
+  for(i in 1:ncol(zDf)) {
+    m1 <- data.frame(matrix(zDf[,i], nrow=16, byrow = T))
+    colnames(m1) <- as.numeric(c(1:24))
+    rownames(m1) <- LETTERS[1:16]
+
+    zMats[[colNames[i]]] <- m1
+
+    if(i == 1) {
+      aveMat <- abs(m1)
+    } else {
+      aveMat <- aveMat + abs(m1)
+    }
+  }
+
+  # heres the average absolute z-scored per well
+  aveMat <- aveMat/length(zMats)
+
+  # add the median absolute z-score as a column in zDf
+  rowMedians <- apply(abs(zDf), MARGIN = 1, FUN=median)
+  zDf$abs_CV_Median <- unlist(rowMedians)
+
+  # make an absolute median plate zscore matrix
+  zAbsMedianPlateDf <- data.frame(matrix(zDf$abs_CV_Median, nrow=16, byrow = T))
+  colnames(zAbsMedianPlateDf) <- as.numeric(c(1:24))
+  rownames(zAbsMedianPlateDf) <- LETTERS[1:16]
+
+  rowSpacing = 2
+
+  wb = openxlsx::createWorkbook()
+  headerStyle = openxlsx::createStyle(textDecoration = "Bold", fontSize=14)
+  naString = "Empty"
+  openxlsx::addWorksheet(wb, "zScore_Data")
+  rowNum = 1
+
+  # add the mean zscore result
+  openxlsx::writeData(wb=wb, sheet=1, "Cross-Parameter Average Absolute Z-score", startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+  openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+  rowNum = rowNum + 1
+  openxlsx::writeData(wb=wb, sheet=1, aveMat, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string=naString)
+
+  # add a row for col header
+  rowNum = rowNum + 1
+  lowerColorLim <- quantile(aveMat, probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(aveMat, probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = rowNum:(nrow(aveMat) + rowNum), cols = 2:(ncol(aveMat)+1), rule=c(lowerColorLim, upperColorLim))
+
+  # move down to next chunk
+  rowNum = rowNum + nrow(aveMat) + rowSpacing
+
+  openxlsx::writeData(wb=wb, sheet=1, "Cross-Parameter Median Absolute Z-score", startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+  openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+  rowNum = rowNum + 1
+  openxlsx::writeData(wb=wb, sheet=1, zAbsMedianPlateDf, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string=naString)
+
+  # add a row for col header
+  rowNum = rowNum + 1
+  lowerColorLim <- quantile(zAbsMedianPlateDf, probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(zAbsMedianPlateDf, probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = rowNum:(nrow(aveMat) + rowNum), cols = 2:(ncol(aveMat)+1), rule=c(lowerColorLim, upperColorLim))
+
+  # move down to next chunk
+  rowNum = rowNum + nrow(aveMat) + rowSpacing
+
+  for(zMatName in names(zMats)) {
+    zname <- paste0(zMatName, " Z-score")
+    zMat <- zMats[[zMatName]]
+    openxlsx::writeData(wb=wb, sheet=1, zname, startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+    openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+    rowNum = rowNum + 1
+    openxlsx::writeData(wb=wb, sheet=1, zMat, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string = naString)
+
+    # add a row for col header
+    rowNum = rowNum + 1
+
+    lowerColorLim <- quantile(zMat, probs=(0.05), na.rm=T)
+    upperColorLim <- quantile(zMat, probs=(0.95), na.rm=T)
+    print("row number just before cond format")
+    print(rowNum)
+    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
+
+    # '#4491fc'
+
+    rowNum = rowNum + nrow(zMat) + rowSpacing
+  }
+
+  # add the z-score unpivoted matrix
+  openxlsx::addWorksheet(wb, "Unpivoted_Zscore_Matrix")
+  rownames(zDf) <- refPlate@wellIds
+  openxlsx::writeData(wb=wb, sheet=2, zDf, startRow=1, colNames=T, rowNames = T, keepNA = T, na.string=naString)
+
+  # conditional formatting
+  lowerColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=2, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = 2:(nrow(zDf) + 2), cols = (ncol(zDf) + 1), rule=c(lowerColorLim, upperColorLim))
+
+  # lets add the cvs summary data
+  cvs <- data.frame(cvs)
+  colnames(cvs) <- c('Coefficient of Variation')
+  openxlsx::addWorksheet(wb, "Coef_of_Variation_Summary")
+  openxlsx::writeData(wb=wb, sheet=3, paste0("Plate Input File: ",plateFile), startRow=1, colNames=F, rowNames=F)
+  openxlsx::writeData(wb=wb, sheet=3, cvs, startRow=2, colNames=T, rowNames = T)
+
+  fileName = format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
+  fileName <- paste0(rootExportDirectory, "/", fileName)
+
+  openxlsx::saveWorkbook(wb,file=fileName,overwrite = T)
+
+}
+
 
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   plates <- plateSet@plates
 
   for(plateName in names(plates)) {
     plate <- plates[[plateName]]
+
+
+
     data <- plate@plateData
 
     d2 <- sapply(data, FUN=as.numeric, axis=1)
