@@ -7,7 +7,7 @@ analyze <- function() {
 
 
 
-runAnaylsis <- function(asoParameterXlsxFilePath) {
+runAnalysis <- function(asoParameterXlsxFilePath) {
 
   # parse parameter and analysis settings
   aso <- aso:::read_aso_parameter_file(asoParameterXlsxFilePath)
@@ -47,12 +47,12 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   aso <- aso:::transformData(aso)
 
   # create optional plate view pdf.
-  aso:::exportPlateViews(aso)
+  ## aso:::exportPlateViews(aso)
 
   # create optional bar-chart
-  aso:::exportBarCharts(aso)
+  ## aso:::exportBarCharts(aso)
 
-  ttDf <- aso:::runPairedTTest(aso)
+  ## ttDf <- aso:::runPairedTTest(aso)
 
 
   # ggplot2::ggplot(data=ttDf) +
@@ -62,11 +62,7 @@ runAnaylsis <- function(asoParameterXlsxFilePath) {
   #
   # p <- p + geom_tile()
   #
-  aso:::exportPairedTTestResult(ttDf, "file")
-
-
-
-
+  ## aso:::exportPairedTTestResult(ttDf, "file", aso)
 
   print("Analyis Done")
 
@@ -242,8 +238,6 @@ applyDataCoverageFilters <- function(aso) {
   pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c('Statistic', 'Suggested_Abbreviation', 'Min_Data_Coverage_PCT')]
   pSize <- aso@methodParameters[['plate_format']]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT/100.0) * pSize)
-
-  pInfo$max_data_loss <- 10
 
   pInfo <- pInfo[,c(2,ncol(pInfo))]
 

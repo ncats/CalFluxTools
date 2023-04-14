@@ -478,7 +478,7 @@ getPlateDataByWellSet <- function(plate, wellSet) {
   return(dataChunk)
 }
 
-exportPairedTTestResult <- function(ttestResult, fileName) {
+exportPairedTTestResult <- function(ttestResult, fileName, aso) {
   # df <- data.frame(matrix(ncol=4, nrow=0))
   # for(resName in names(ttest_result)) {
   #   res <- ttest_result[[resName]]
@@ -487,11 +487,11 @@ exportPairedTTestResult <- function(ttestResult, fileName) {
   # }
 
   fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
-  openxlsx::write.xlsx(list(Paired_tTest_Results=ttest_result), fileName)
+  openxlsx::write.xlsx(list(Paired_tTest_Results=ttestResult), fileName)
 
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
-  tResSmall <- ttestResult[,c(1,2,4,10,9,11)]
+  tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
   tShortLFC <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='log2FoldChange')
   tShortP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='pValue')
   tShortAdjP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='adjP')
