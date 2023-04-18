@@ -102,6 +102,7 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   colNames = colnames(zDf)
   zMats <- list()
   aveMat <- ""
+
   for(i in 1:ncol(zDf)) {
     m1 <- data.frame(matrix(zDf[,i], nrow=16, byrow = T))
     colnames(m1) <- as.numeric(c(1:24))
@@ -119,9 +120,19 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   # heres the average absolute z-scored per well
   aveMat <- aveMat/length(zMats)
 
+  zNcol = ncol(zDf)
+
+  # add number of parameters that exceed 1SD absolute for each well
+  z1SDsums <- zDf > 1.0 | zDf < -1.0
+  z1SDsums <- rowSums(z1SDsums)
+
   # add the median absolute z-score as a column in zDf
   rowMedians <- apply(abs(zDf), MARGIN = 1, FUN=median)
   zDf$abs_CV_Median <- unlist(rowMedians)
+
+  # add the frequency GT 1SD
+  zDf$freq_GT_1SD <- z1SDsums
+  zDf$fract_param_GT_1SD <- signif(zDf$freq_GT_1SD/(zNcol*1.0), digits=3)
 
   # make an absolute median plate zscore matrix
   zAbsMedianPlateDf <- data.frame(matrix(zDf$abs_CV_Median, nrow=16, byrow = T))
@@ -191,11 +202,12 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   openxlsx::addWorksheet(wb, "Unpivoted_Zscore_Matrix")
   rownames(zDf) <- refPlate@wellIds
   openxlsx::writeData(wb=wb, sheet=2, zDf, startRow=1, colNames=T, rowNames = T, keepNA = T, na.string=naString)
+  openxlsx::freezePane(wb=wb, sheet=2, firstRow=T, firstCol=T)
 
   # conditional formatting
   lowerColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.05), na.rm=T)
   upperColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.95), na.rm=T)
-  openxlsx::conditionalFormatting(wb, sheet=2, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = 2:(nrow(zDf) + 2), cols = (ncol(zDf) + 1), rule=c(lowerColorLim, upperColorLim))
+  openxlsx::conditionalFormatting(wb, sheet=2, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = 2:(nrow(zDf) + 2), cols = (ncol(zDf) - 1), rule=c(lowerColorLim, upperColorLim))
 
   # lets add the cvs summary data
   cvs <- data.frame(cvs)
