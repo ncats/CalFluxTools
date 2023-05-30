@@ -120,11 +120,12 @@ read_stemonix_metadata <- function(filename,plate){
   return(plate)
 }
 
-
+#' Reads an input ASO parameter Excel file and returns an aso object.
 #' @param filename excel aso parmeter file
-#' @return returns an aso object ready for analysis
+#' @return returns an aso object ready for analysis. The ASO file will not have plate data but rather just instructions on data
+#' analysis and input data files. This is typically the first function to run to generate an initialized aso object.
 #' @export
-read_aso_parameter_file <- function(filename) {
+readAsoParameterFile <- function(filename) {
   paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
 
  #print(dim(paramsDf))
@@ -187,7 +188,7 @@ parseAnalysisSettings <- function(analysisDf) {
 
 parseProcessingParams <- function(processingDf) {
   params <- list()
-  for(i in 1:ncol(processingDf)) {
+  for(i in 1:nrow(processingDf)) {
     key <- trimws(processingDf[i,1])
     val <- trimws(processingDf[i,2])
     if(key != "" && val != "") {

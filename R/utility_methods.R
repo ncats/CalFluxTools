@@ -37,6 +37,244 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
   return(plate)
 }
 
+
+replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
+
+  #plateSet <- aso@plateSet
+  #blankReplacements <- blankParamsList
+  #naReplacements <- naParamList
+
+  # run replacement for each plate
+  # extract plate data for the plate
+  # for each column name in replacment map, drop in value for blank or na relapcements as specified
+
+  for(plateName in names(plateSet@plates)) {
+    plate <- plateSet@plates[[plateName]]
+    df = plate@plateData
+
+    if(length(blankReplacements) > 0) {
+      for(blankCol in names(blankReplacements)) {
+
+        repVal = blankReplacements[[blankCol]]
+
+        if(blankCol %in% colnames(df)) {
+          vals <- df[[blankCol]]
+          vals[vals == "Blank"] <- repVal
+
+          df[[blankCol]] <- vals
+        }
+      }
+    }
+
+    if(length(naReplacements) > 0) {
+      for(naCol in names(naReplacements)) {
+        repVal = naReplacements[[naCol]]
+
+        if(naCol %in% colnames(df)) {
+          vals <- df[[naCol]]
+          vals[vals == "N/A"] <- repVal
+
+          df[[naCol]] <- vals
+        }
+      }
+    }
+
+    plate@plateData <- df
+    plateSet@plates[[plateName]] <- plate
+  }
+
+  return(plateSet)
+}
+
+runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
+  refPlate <- plateSet@plates[[1]]
+
+  df <- refPlate@plateData
+  df <- sapply(df, as.numeric)
+  means <- colMeans(na.omit(df))
+  sds <- apply(na.omit(df), FUN=sd, MARGIN=2)
+  cvs <- sds/means
+
+  zDf <- sweep(df,2,means)
+  zDf <- sweep(zDf,2,sds, FUN='/')
+  zDf <- data.frame(zDf)
+
+  colNames = colnames(zDf)
+  zMats <- list()
+  aveMat <- ""
+
+  for(i in 1:ncol(zDf)) {
+    m1 <- data.frame(matrix(zDf[,i], nrow=16, byrow = T))
+    colnames(m1) <- as.numeric(c(1:24))
+    rownames(m1) <- LETTERS[1:16]
+
+    zMats[[colNames[i]]] <- m1
+
+    if(i == 1) {
+      aveMat <- abs(m1)
+    } else {
+      aveMat <- aveMat + abs(m1)
+    }
+  }
+
+  # heres the average absolute z-scored per well
+  aveMat <- aveMat/length(zMats)
+
+  zNcol = ncol(zDf)
+
+  # add number of parameters that exceed 1SD absolute for each well
+  z1SDsums <- zDf > 1.0 | zDf < -1.0
+  z1SDsums <- rowSums(z1SDsums)
+
+  # add the median absolute z-score as a column in zDf
+  rowMedians <- apply(abs(zDf), MARGIN = 1, FUN=median)
+  zDf$abs_CV_Median <- unlist(rowMedians)
+
+  # add the frequency GT 1SD
+  zDf$freq_GT_1SD <- z1SDsums
+  zDf$fract_param_GT_1SD <- signif(zDf$freq_GT_1SD/(zNcol*1.0), digits=3)
+
+  # make an absolute median plate zscore matrix
+  zAbsMedianPlateDf <- data.frame(matrix(zDf$abs_CV_Median, nrow=16, byrow = T))
+  colnames(zAbsMedianPlateDf) <- as.numeric(c(1:24))
+  rownames(zAbsMedianPlateDf) <- LETTERS[1:16]
+
+  rowSpacing = 2
+
+  wb = openxlsx::createWorkbook()
+  headerStyle = openxlsx::createStyle(textDecoration = "Bold", fontSize=14)
+  naString = "Empty"
+  openxlsx::addWorksheet(wb, "zScore_Data")
+  rowNum = 1
+
+  # add the mean zscore result
+  openxlsx::writeData(wb=wb, sheet=1, "Cross-Parameter Average Absolute Z-score", startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+  openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+  rowNum = rowNum + 1
+  openxlsx::writeData(wb=wb, sheet=1, aveMat, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string=naString)
+
+  # add a row for col header
+  rowNum = rowNum + 1
+  lowerColorLim <- quantile(aveMat, probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(aveMat, probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = rowNum:(nrow(aveMat) + rowNum), cols = 2:(ncol(aveMat)+1), rule=c(lowerColorLim, upperColorLim))
+
+  # move down to next chunk
+  rowNum = rowNum + nrow(aveMat) + rowSpacing
+
+  openxlsx::writeData(wb=wb, sheet=1, "Cross-Parameter Median Absolute Z-score", startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+  openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+  rowNum = rowNum + 1
+  openxlsx::writeData(wb=wb, sheet=1, zAbsMedianPlateDf, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string=naString)
+
+  # add a row for col header
+  rowNum = rowNum + 1
+  lowerColorLim <- quantile(zAbsMedianPlateDf, probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(zAbsMedianPlateDf, probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = rowNum:(nrow(aveMat) + rowNum), cols = 2:(ncol(aveMat)+1), rule=c(lowerColorLim, upperColorLim))
+
+  # move down to next chunk
+  rowNum = rowNum + nrow(aveMat) + rowSpacing
+
+  for(zMatName in names(zMats)) {
+    zname <- paste0(zMatName, " Z-score")
+    zMat <- zMats[[zMatName]]
+    openxlsx::writeData(wb=wb, sheet=1, zname, startRow=rowNum, colNames=F, rowNames =F, headerStyle = headerStyle)
+    openxlsx::addStyle(wb=wb, sheet=1, style=headerStyle, rows=rowNum, cols=1)
+    rowNum = rowNum + 1
+    openxlsx::writeData(wb=wb, sheet=1, zMat, startRow=rowNum, colNames=T, rowNames =T, keepNA = T, na.string = naString)
+
+    # add a row for col header
+    rowNum = rowNum + 1
+
+    lowerColorLim <- quantile(zMat, probs=(0.05), na.rm=T)
+    upperColorLim <- quantile(zMat, probs=(0.95), na.rm=T)
+    print("row number just before cond format")
+    print(rowNum)
+    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
+
+    # '#4491fc'
+
+    rowNum = rowNum + nrow(zMat) + rowSpacing
+  }
+
+  # add the z-score unpivoted matrix
+  openxlsx::addWorksheet(wb, "Unpivoted_Zscore_Matrix")
+  rownames(zDf) <- refPlate@wellIds
+  openxlsx::writeData(wb=wb, sheet=2, zDf, startRow=1, colNames=T, rowNames = T, keepNA = T, na.string=naString)
+  openxlsx::freezePane(wb=wb, sheet=2, firstRow=T, firstCol=T)
+
+  # conditional formatting
+  lowerColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.05), na.rm=T)
+  upperColorLim <- quantile(unlist(zDf$abs_CV_Median), probs = c(0.95), na.rm=T)
+  openxlsx::conditionalFormatting(wb, sheet=2, type="colorScale", style = c('#ebf6f7','#4491fc'), rows = 2:(nrow(zDf) + 2), cols = (ncol(zDf) - 1), rule=c(lowerColorLim, upperColorLim))
+
+  # lets add the cvs summary data
+  cvs <- data.frame(cvs)
+  colnames(cvs) <- c('Coefficient of Variation')
+  openxlsx::addWorksheet(wb, "Coef_of_Variation_Summary")
+  openxlsx::writeData(wb=wb, sheet=3, paste0("Plate Input File: ",plateFile), startRow=1, colNames=F, rowNames=F)
+  openxlsx::writeData(wb=wb, sheet=3, cvs, startRow=2, colNames=T, rowNames = T)
+
+  fileName = format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
+  fileName <- paste0(rootExportDirectory, "/", fileName)
+
+  openxlsx::saveWorkbook(wb,file=fileName,overwrite = T)
+
+}
+
+
+imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
+  plates <- plateSet@plates
+
+  for(plateName in names(plates)) {
+    plate <- plates[[plateName]]
+
+
+
+    data <- plate@plateData
+
+    d2 <- sapply(data, FUN=as.numeric, axis=1)
+
+    d2 <- data.frame(d2)
+
+    # does this ignore NaNs
+    minVal <- sapply(d2, axix=1, FUN=min, c(na.rm=T))
+
+    for(col in 1:ncol(d2)) {
+      colName <- colnames(d2)[col]
+      d <- na.omit(unlist(d2[,col]))
+      d <- d[d!=0]
+      min <- min(d)
+      repVal <- min * pctMin
+
+      colData <- unlist(d2[,col])
+
+      if(colName %in% colsToImpute$na_impute) {
+        colData[is.na(colData)] <- repVal
+      }
+
+      if(colName %in% colsToImpute$zero_impute) {
+        colData[colData == 0.0] <- repVal
+      }
+
+      d2[,col] <- colData
+    }
+
+    # put the updated plate data back...
+    plate@plateData <- d2
+    plates[[plateName]] <- plate
+  }
+  # drop in the modified plates with mods to plateData
+  plateSet@plates <- plates
+
+  return(plateSet)
+}
+
+
+
+
+
 #' missingDataReport reports on plate missing values
 #'
 #' @param plate ASO plate
@@ -54,20 +292,25 @@ missingDataReport <- function(plate, plateSize = 384) {
   }
 
   # coerce NA for non-numeric data
-  suppressWarnings(
-    df <- data.frame(lapply(df, as.numeric), check.names = F)
-  )
-  res <- data.frame(colSums(is.na(df)), check.names=F)
-  res2 <- data.frame(colSums(na.omit(df) == 0), check.names=F)
+  #suppressWarnings(
+  #  df <- data.frame(lapply(df, as.numeric), check.names = F)
+  #)
+  res <- data.frame(colSums(df == "N/A"), check.names=F)
+  res2 <- data.frame(colSums(df == "Blank"), check.names=F)
   res <- cbind(res, res2)
 
-  res$missing_count <- res[,1] + res[,2]
-  res$good_count <- 384 - res$missing_count
-  res$parameter <- rownames(res)
+  colnames(res) <- c("NA_Count", "Blank_Count")
 
-  res <- res[,c(5,4,3,1,2)]
+  res$Missing_Count <- res[,1] + res[,2]
+  res$Well_Count <- 384
+  res$Empty_Wells <- colSums(df == "Empty")
+  res$Nonempty_Wells <- res$Well_Count - res$Empty_Wells
+  res$Good_Count <- res$Nonempty_Wells - res$Missing_Count
+  res$Parameter <- rownames(res)
 
-  colnames(res) <- c("parameter", "good_count", "missing_count", "na_count", "zero_count")
+  res <- res[,c(8,4,5,6,1,2,3,7)]
+
+  #colnames(res) <- c("parameter", "good_count", "missing_count", "na_count", "zero_count")
 
   return(res)
 }
@@ -104,7 +347,11 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
   i = 1
 
   #print(parameter)
-  #print(colnames(plate@plateData))
+
+  print(colnames(plate@plateData))
+  print(parameter)
+  print(textValues)
+  print(numericValues)
 
   vals <- plate@plateData[,parameter]
 
@@ -128,15 +375,24 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
+      print("initial common params")
+      print(commonParams)
       commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
+      print("other params")
+      print(params)
       paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
       commonParamNames <- intersect(commonParamNames, paramNames)
     }
     i = i + 1
   }
+
+  print("Harmonizing.... common params")
+
+  print("Common params:")
+  print(commonParams)
 
   plateSet@plateNames
   for(name in plateSet@plateNames) {
@@ -174,14 +430,16 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
 
-
-      print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!HEY  TRANSFORMING!!!!!")
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
+
+      print("hey in data transform")
 
       # plateData may include wellIds in first column, so for numeric transformation, we need to skip first column using firstDataCol
       refData <- refPlate@plateData[,firstDataCol:ncol(refPlate@plateData)]
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
+
+      print("Have ref and expt data")
 
       suppressWarnings(
       refData <- sapply(refData, 'as.numeric')
@@ -191,6 +449,8 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       )
       tfLabel <- paste0(platePair[2], '_vs_' , platePair[1], '_(', method, ')')
       if(method == 'log2ratio') {
+        exptData <- exptData + 0.001
+        refData <- refData + 0.001
         tfd <- data.frame(log(exptData/refData,2), check.names = F)
         plateSet@transformedPlateData[[tfLabel]] <- tfd
         plateSet@transformationNames <- c(plateSet@transformationNames, tfLabel)
@@ -393,7 +653,7 @@ filterParametersOnList <- function(plate, paramsToKeep) {
 
 
 
-    df <- df[,paramsToKeep]
+  df <- df[,paramsToKeep]
 
   plate@plateData <- df
   return(plate)
@@ -478,7 +738,7 @@ getPlateDataByWellSet <- function(plate, wellSet) {
   return(dataChunk)
 }
 
-exportPairedTTestResult <- function(ttestResult, fileName) {
+exportPairedTTestResult <- function(aso, ttestResult, fileName) {
   # df <- data.frame(matrix(ncol=4, nrow=0))
   # for(resName in names(ttest_result)) {
   #   res <- ttest_result[[resName]]
@@ -486,21 +746,97 @@ exportPairedTTestResult <- function(ttestResult, fileName) {
   #   resList <- list(sample=sample, condition=resName, tval=res$statistic, pval=res$p.value)
   # }
 
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
-  openxlsx::write.xlsx(list(Paired_tTest_Results=ttest_result), fileName)
+  # fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
+  # openxlsx::write.xlsx(list(Paired_tTest_Results=ttestResult), fileName)
 
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
-  tResSmall <- ttestResult[,c(1,2,4,10,9,11)]
+  tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
   tShortLFC <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='log2FoldChange')
   tShortP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='pValue')
   tShortAdjP <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='adjP')
   tShortLogFDR <- reshape2::dcast(tResSmall, Sample + Parameter ~ Conc, value.var='-log10(adjP)')
 
-  tPivot = tShortLFC
-  tPivot = cbind(tPivot, tShortP)
-  tPivot = cbind(tPivot, tShortAdjP)
-  tPivot = cbind(tPivot, tShortLogFDR)
+  concCount = ncol(tResSmall)-3
+  columnNames = c(colnames(tShortLFC)[1:2],rep(colnames(tShortLFC[3:ncol(tShortLFC)]),4))
 
+  tPivot = tShortLFC
+  tPivot = merge(tPivot, tShortP, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('_LFC', '_pVal'))
+  tPivot = merge(tPivot, tShortAdjP, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('', '_adjP'))
+  tPivot = merge(tPivot, tShortLogFDR, by.x=c('Sample','Parameter'), by.y=c('Sample','Parameter'), suffixes=c('', '_-logFDR'))
+
+  colnames(tPivot) <- columnNames
+
+  wb <- openxlsx::createWorkbook()
+
+  ## Add a worksheet
+  openxlsx::addWorksheet(wb, "TTest_Results")
+  openxlsx::addWorksheet(wb, "TTest_Results_Tall_Format")
+
+  topHeader = c("","",rep("log2FoldChange", concCount),rep("pValue",concCount), rep("adjP",concCount), rep("-log10(adjP)",concCount))
+  openxlsx::writeData(wb, sheet=1, x=t(topHeader), startCol=1, startRow=1, rowNames=F, colNames=F)
+  openxlsx::writeData(wb, sheet=1, x=tPivot, startCol=1, startRow=2, rowNames=F, colNames=T)
+  head(openxlsx::readWorkbook(wb, sheet=1))
+
+  centerStyle <- openxlsx::createStyle(halign = "center")
+  colors = c(
+    '#D8E4BC',
+    '#C5D9F1',
+    '#CCC0DA',
+    '#D9D9D9'
+  )
+
+  startCol = 3
+  for(i in c(1:4)) {
+    centerColorStyle <- openxlsx::createStyle(halign = "center", fgFill=colors[i])
+    prevStart = startCol
+    openxlsx::mergeCells(wb, sheet=1, cols = prevStart:(prevStart+concCount-1), rows = 1)
+    openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 1, cols = prevStart)
+    openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 2, cols = prevStart:(prevStart+concCount-1))
+    #print(paste0(prevStart," to ",(prevStart + concCount)))
+    startCol = startCol + concCount
+  }
+
+  openxlsx::addStyle(wb, sheet=1, centerStyle, rows = 2, cols = 1:2)
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#63BE7B','#FFEB84','#F8696B'), rows = 3:nrow(tPivot), cols = 3:(3+concCount-1))
+
+  openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#F8696B', '#EECBC4'), rule=c(0,0.1), rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)))
+
+  emptyStyle <- openxlsx::createStyle(bgFill = "#ffffff")
+
+  openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
+                        type = "notContains", rule="", style = emptyStyle)
+
+  openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
+                                  type = "expression", rule=">0.1", style = emptyStyle)
+
+  fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
+  fileName <- paste0(aso@methodParameters[['root_dir']], "/", fileName)
+
+  # lets add the unpivoted table
+  openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
+
+  openxlsx::saveWorkbook(wb, fileName, overwrite = T)
 
 }
+
+
+exportTransformedData <- function(aso) {
+
+  data <- data.frame(aso@plateSet@transformedPlateData[[1]])
+
+  wellAnn <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  data <- cbind(wellAnn, data)
+
+  dataList <- list()
+  dataList[['Transformed_Data']] <- data
+
+  fileName <- paste0("Transformed_Plate_Data_",format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx")
+
+  openxlsx::write.xlsx(dataList, file=fileName)
+
+}
+
+
+
