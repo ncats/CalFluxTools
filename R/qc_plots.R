@@ -275,7 +275,11 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
 }
 
 
-
+#' This method returns a ggplot object representing the transformed data, for a given sample name and parameter name.
+#' @param plateSet the plateset object containing the transformed data
+#' @param sampleName the sample (compound) to return data for.
+#' @param parameter the parameter for which to return data.
+#' @param tMethod the transoformation method for the transformed data.
 getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio') {
 
   require('dplyr')
@@ -294,8 +298,8 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   colnames(data)[ncol(data)] <- 'val'
 
   #compute mean and SD, via dplyr
-  dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val)))
-  dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val)))
+  dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val, na.rm=T)))
+  dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val, na.rm=T)))
 
   # set conc as a factor and order levels
   dataSum$Concentration <- factor(dataSum$Concentration, levels = dataSum$Concentration[order(as.numeric(dataSum$Concentration))])
@@ -311,10 +315,6 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   dataSum$sdLow <- dataSum[,2] - dataSum$SD
   dataSum$sdHigh <- dataSum[,2] + dataSum$SD
 
-  #yTitle <- paste0(plateSet@transformationNames[1], " (", param, ")")
-
-  #colnames(dataSum)[2] <- yTitle
-  #colnames(data)[ncol(data)] <- yTitle
   title <- paste0(sampleName, " -- ", parameter)
 
   p <- ggplot2::ggplot(dataSum, ggplot2::aes(x=Concentration, y=dataSum[,2])) +
@@ -328,6 +328,13 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   return(p)
 }
 
+#' This method returns a trellis or table of bar chart plots for a set of samples and parameters.
+#' @param plateSet the plateset object containing the data.
+#' @param samples the vector of sample names (compounds, aso ids), for which to pull data.
+#' @param parameters a vector of parameters for which to build plots.
+#' @param samplesIn indicates if samples should be represented as rows or columns.
+#' @param tMethod the transformation method to export
+#' @return returns a grid of bar charts.
 getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows', tMethod = 'log2Ratio') {
   if(is.character(samples) && samples == 'all') {
     # get all compound annotations
@@ -347,17 +354,17 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
   }
 
   grid <- gridExtra::arrangeGrob(grobs=plots, ncol=length(parameters), nrow=length(samples), as.table = T)
-
   return(grid)
 }
 
 
+#' creates a correlation plot for paramters
+#' @param aso an aso object containing transformed data.
 getParameterCorrelationMatrix <- function(aso) {
   tPlateData = data.frame(aso@plateSet@transformedPlateData)
   corrMat <- cor(tPlateData, use = 'pairwise.complete', method = 'pearson')
   corrP <- corrplot::corrplot(tPlateData)
-
-  }
+}
 
 
 
