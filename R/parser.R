@@ -4,8 +4,8 @@
 ##' @author Andrew Patt
 ##' @export
 read_stemonix_data <- function(filename){
-  raw_data <- readr::read_file(filename)
-  raw_data <- strsplit(raw_data,split="\t")[[1]]
+  raw_data <- readr::read_file(filename, locale = locale(encoding = "ISO-8859-1"))
+  raw_data <- strsplit(raw_data,split='\t')[[1]]
   raw_data <- sapply(raw_data,function(x){
     if(identical(x,"")){
       return("Blank")
@@ -24,6 +24,7 @@ read_stemonix_data <- function(filename){
 
   # Extract plate name from file name in header
   plate_id = header[1]
+  print(plate_id)
   plate_id = unlist(strsplit(plate_id,"\\",fixed=TRUE))
   plate_id = plate_id[length(plate_id)]
   plate_id = gsub(".fmd","",plate_id,fixed=TRUE)
@@ -63,9 +64,11 @@ parse_individual_plate <- function(plate){
 
   plate_rows <- list()
   temp_row <- c()
-
+  print("Checking Plate")
+  print(plate)
   # Using blank entries to demarcate row beginnings
   for(i in plate){
+    print(i)
     if(i!=""){
       temp_row <-c(temp_row,i)
     }else{
@@ -74,6 +77,7 @@ parse_individual_plate <- function(plate){
     }
   }
 
+  print(length(plate_rows))
   # Build wellId vector. Assuming statistic, start sample and end sample
   # are the only metadata included on the individual plate level
   wellId_columns <- plate_rows[[1]][6:length(plate_rows[[1]])]
