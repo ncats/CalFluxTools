@@ -620,5 +620,77 @@ runPairedTTest <- function(aso) {
   return(df)
 }
 
+zFactor <- function(aso, dataType = 'transformed'){
+  # The @ is used to dereference
+  # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
+  # it's designed as a list or dictionary
+  plateTransformedData <- aso@plateSet@transformedPlateData
 
+  # an R list object is dereferenced using double brackets
+  # you can refer to a member of the list by name or by index. *R indexing starts at 1
+  if(dataType == 'transformed'){
+    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+  } else {
+    testData <- aso@plateSet@plates[[2]]@plateData
+  }
+  # the platemap holds well annotations, it's a dataframe
+  # this gets the plateset from the aso object, plate list, takes the first plate, and then
+  # the plateAnnotationMap field.
+  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
 
+  # an alternative to viewing a table is using the 'Global Envionment' in the upper right window.
+  # if the variable is a data.frame, click on the table icon on the far right to view the data.
+
+  # Combines plateMap and transformedData
+  tableWithAnnotation <- cbind(plateMap, testData)
+
+  # Created a data frame that does not contain empty wells
+  splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  # Create a data frame that only contains positive controls
+  PosCtrl = splicedData[splicedData$WellType == "Positive Control",]
+  # unique(PosCtrl$WellType)
+
+  # Create a data frame that only contains negative controls
+  NegCtrl = splicedData[splicedData$WellType == "Negative Control",]
+  # unique(NegCtrl$WellType)
+
+  # make means and sds data frame for both controls
+  numericPosCtrl <- data.frame(sapply(PosCtrl[,(ncol(plateMap)+1):ncol(PosCtrl)], as.numeric))
+  allUPosCtrl <- colMeans(numericPosCtrl)
+  allSDPosCtrl <- sapply(numericPosCtrl, sd)
+
+  numericNegCtrl <- data.frame(sapply(NegCtrl[,(ncol(plateMap)+1):ncol(NegCtrl)], as.numeric))
+  allUNegCtrl <- colMeans(numericNegCtrl)
+  allSDNegCtrl <- sapply(numericNegCtrl, sd)
+
+  zFactor = 1 - ((3*(allSDPosCtrl+allSDNegCtrl))/(abs(allUPosCtrl - allUNegCtrl)))
+
+  coeffVarPosCtrl = allSDPosCtrl/abs(allUPosCtrl)
+  coeffVarNegCtrl = allSDNegCtrl/abs(allUNegCtrl)
+
+  # make a data frame with all means, sds, and zFactor and cbind them together
+  zFactorTable <- cbind(data.frame(allUPosCtrl), data.frame(allSDPosCtrl), data.frame(coeffVarPosCtrl),
+        data.frame(allUNegCtrl), data.frame(allSDNegCtrl), data.frame(coeffVarNegCtrl),
+        data.frame(zFactor))
+
+  return(zFactorTable)
+}
+
+zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
+  # Make a list
+  zPrimeList <- list()
+
+  # First call to zFactor calculation to calculate for transformed data
+  zPrimeList[['transformedDataResults']] <- aso:::zFactor(aso)
+
+  # Second call to zFactor to calculate for raw data
+  zPrimeList[['rawDataResults']] <- aso:::zFactor(aso, 'experimental')
+
+  # Write to an Excel file
+  openxlsx::write.xlsx(zPrimeList,
+                       file = paste0('zPrimeResults_', Sys.time(), '.xlsx'),
+                       rowNames = TRUE)
+
+  return(zPrimeList)
+  }
