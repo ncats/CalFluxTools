@@ -694,3 +694,49 @@ zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
 
   return(zPrimeList)
   }
+
+runPca = function(aso, dataType = 'transformed'){
+  plateTransformedData = aso@plateSet@transformedPlateData
+  dataType = 'transformed'
+
+  if(dataType == 'transformed'){
+    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+  } else {
+    testData <- aso@plateSet@plates[[2]]@plateData
+  }
+
+  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  tableWithAnnotation <- cbind(plateMap, testData)
+
+  splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  #create dataframe with test data that does not include plate map
+  testDataSplice = splicedData %>% select(last_col(15):last_col())
+  testDataSpliceVar = testDataSplice[ , which(apply(testDataSplice, 2, var) != 0)]
+  #transpose
+  testDataSpliceT = t(testDataSplice)
+  #transposition caused columns with zero variance, remove those
+  testDataSpliceTvar = testDataSpliceT[ , which(apply(testDataSpliceT, 2, var) != 0)]
+
+  pcaASO = prcomp(na.omit(testDataSpliceVar), center = TRUE, scale. = TRUE, retx = TRUE)
+  pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = TRUE, retx = TRUE)
+
+  pcaList = list()
+  pcaList[['Raw']] = pcaASO
+  pcaList[['Transposed']] = pcaASOT
+
+  return(pcaList)
+
+}
+
+plotPCA = function(pcaList, pcaType = "Raw"){
+
+  pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2)) + geom_point(size = 3) + labs(title = pcaType)
+
+  return(pcaPlot)
+
+}
+
+
+

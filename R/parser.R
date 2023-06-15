@@ -147,6 +147,8 @@ readAsoParameterFile <- function(filename) {
 
 parseAnalysisSettings <- function(analysisDf) {
   rootDir = ""
+  #create output directory
+
   plateFormat = 384
   plateFiles <- list()
   plateMaps <- list()
@@ -181,6 +183,7 @@ parseAnalysisSettings <- function(analysisDf) {
 
   allParamsList <- list()
   allParamsList[['root_dir']] <- rootDir
+  #Add an output directory in this list as well, can use that output directory in any file creation
   allParamsList[['plate_format']] <- plateFormat
   allParamsList[['plate_file_list']] <- plateFiles
   allParamsList[['plate_map_list']] <- plateMaps
