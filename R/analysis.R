@@ -695,24 +695,29 @@ zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
   return(zPrimeList)
   }
 
-runPca = function(aso, dataType = 'transformed'){
+runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
   plateTransformedData = aso@plateSet@transformedPlateData
-  dataType = 'transformed'
+
+  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
 
   if(dataType == 'transformed'){
     testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
-  } else {
+  } else if (dataType == "raw"){
     testData <- aso@plateSet@plates[[2]]@plateData
+  } else {
+    testData = plateTransformedData[[1]]
+    testData = testData[plateMap$Compound %in% compoundIDList,]
+    plateMap = plateMap[plateMap$Compound %in% compoundIDList,]
   }
-
-  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
 
   tableWithAnnotation <- cbind(plateMap, testData)
 
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
+  reducedPlateMap = splicedData[, 1:ncol(plateMap)]
+
   #create dataframe with test data that does not include plate map
-  testDataSplice = splicedData %>% select(last_col(15):last_col())
+  testDataSplice = splicedData %>% select(ncol(plateMap):last_col())
   testDataSpliceVar = testDataSplice[ , which(apply(testDataSplice, 2, var) != 0)]
   #transpose
   testDataSpliceT = t(testDataSplice)
@@ -723,16 +728,39 @@ runPca = function(aso, dataType = 'transformed'){
   pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = TRUE, retx = TRUE)
 
   pcaList = list()
-  pcaList[['Raw']] = pcaASO
-  pcaList[['Transposed']] = pcaASOT
+  pcaList[['Wells PCA']] = pcaASO
+  pcaList[['Parameters PCA']] = pcaASOT
+
+  #add something in the list to add the annotation
+  pcaList[['Annotations']] = reducedPlateMap
+  pcaList[['Parameter Names']] = colnames(testData)
+
 
   return(pcaList)
 
 }
 
-plotPCA = function(pcaList, pcaType = "Raw"){
+plotPCA = function(pcaList, pcaType = 1){
 
-  pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2)) + geom_point(size = 3) + labs(title = pcaType)
+  if(pcaType == 1){
+    plotTitle = 'Wells PCA'
+
+    labels = pcaList[['Annotations']]$Compound
+
+    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) + geom_point(size = 3) + labs(title = plotTitle)
+
+  } else {
+    plotTitle = 'Parameters PCA'
+
+    labels = pcaList[['Parameter Names']]
+
+    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) + geom_point(size = 3) + labs(title = plotTitle)
+
+  }
+
+  pdf(file = 'PCA.pdf')
+  print(pcaPlot)
+  dev.off()
 
   return(pcaPlot)
 
