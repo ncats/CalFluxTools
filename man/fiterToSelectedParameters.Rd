@@ -6,6 +6,9 @@
 \usage{
 fiterToSelectedParameters(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object with working set of plate data reduced to parameters specified in the parameter file.
 }

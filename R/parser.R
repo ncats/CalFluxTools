@@ -5,6 +5,7 @@
 ##' @export
 read_stemonix_data <- function(filename){
   raw_data <- readr::read_file(filename)
+#  raw_data <- stringr::str_replace_all(raw_data, "\r", "")
   raw_data <- strsplit(raw_data,split="\t")[[1]]
   raw_data <- sapply(raw_data,function(x){
     if(identical(x,"")){
@@ -32,7 +33,7 @@ read_stemonix_data <- function(filename){
   parsed_plate_list <- list()
   for(i in 1:(length(statistic_dividers)-1)){
     temp_plate <- raw_data[statistic_dividers[i]:(statistic_dividers[i+1]-1)]
-    temp_plate_parsed <- parse_individual_plate(temp_plate)
+    temp_plate_parsed <- aso:::parse_individual_plate(temp_plate)
     parsed_plate_list <- rlist::list.append(parsed_plate_list,temp_plate_parsed)
   }
 
@@ -54,7 +55,7 @@ read_stemonix_data <- function(filename){
 }
 
 ##' Internal function for parsing vector corresponding to a single plate
-##' @param plate
+##' @param plate the plate statistic list
 ##' @return parsed plate data
 ##' @author Andrew Patt
 parse_individual_plate <- function(plate){
@@ -66,6 +67,7 @@ parse_individual_plate <- function(plate){
 
   # Using blank entries to demarcate row beginnings
   for(i in plate){
+    print(i)
     if(i!=""){
       temp_row <-c(temp_row,i)
     }else{
@@ -73,7 +75,7 @@ parse_individual_plate <- function(plate){
       temp_row <- c()
     }
   }
-
+  print(length(plate_rows))
   # Build wellId vector. Assuming statistic, start sample and end sample
   # are the only metadata included on the individual plate level
   wellId_columns <- plate_rows[[1]][6:length(plate_rows[[1]])]
@@ -100,12 +102,12 @@ parse_individual_plate <- function(plate){
   return(list(statistic,out_frame))
 }
 
-
-##' @param filename
-##' @param plate
-##' @return
+##' reads platemap information
+##' @param filename input plate map file name
+##' @param plate an initialized plate object
+##' @return returns a plate with data loaded.
 ##' @author Andrew Patt
-read_stemonix_metadata <- function(filename,plate){
+read_stemonix_metadata <- function(filename, plate){
   raw_data <- read.csv(filename)
   raw_data$Well <- sapply(raw_data$Well, function(x){
     rownum <- readr::parse_number(x)

@@ -18,7 +18,7 @@ processData <- function() {
 #' @param asoParamterXlsxFilePath a file path and file name for the ASO parameter xlsx file. All information required to process aso data is contained in this file.
 #' @returns Returns an aso objecdt with loaded and transformed data. During processing several output summary files will be exported.
 #' @export
-buildAndProcessASO <- function(asoParameterXlsxFilePath) {
+runDataProcessing <- function(asoParameterXlsxFilePath) {
 
   # parse parameter and analysis settings, builds initial aso object.
   aso <- aso:::readAsoParameterFile(asoParameterXlsxFilePath)
@@ -171,7 +171,7 @@ loadPlateMaps <- function(aso) {
 
 
 #' Method updates parameter abbreviations to those specified in the parameter file
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object with parameter abbreviations set to use for all downstream reports.
 setParameterAbbreviaions <- function(aso) {
 
@@ -202,7 +202,7 @@ setParameterAbbreviaions <- function(aso) {
 
 #' Converts well vales to NaN for wells that are annotated in the platemap as "Empty".
 #' Downstream methods will not be impacted by these well values.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object with specified wells masked.
 maskEmptyWells <- function(aso) {
 
@@ -225,7 +225,7 @@ maskEmptyWells <- function(aso) {
 }
 
 #' Reduces the plate data object to only contain data for the subset of selected parameters.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object with working set of plate data reduced to parameters specified in the parameter file.
 fiterToSelectedParameters <- function(aso) {
   pInfo <- aso@parameterInfo
@@ -242,7 +242,7 @@ fiterToSelectedParameters <- function(aso) {
 
 #' Converts categorical data to numeric values according to specified rules in the input parameter file.
 #' Note that this method will only run on parameters that are flagged as having categorical data.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
 applyCategoricalToNumeric <- function(aso) {
 
@@ -276,7 +276,7 @@ applyCategoricalToNumeric <- function(aso) {
 }
 
 #' Replaces 'Blank' or Empty data and N/A data for each parameter according to specified rules for each parameter.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
 replaceBlanksAndNAValues <- function(aso) {
   paramInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, ]
@@ -296,7 +296,7 @@ replaceBlanksAndNAValues <- function(aso) {
 
 #' Runs an analysis on the aso object to report on data coverage for each parameter.
 #' The missing data report is entered into the aso object.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object containing the missing data report in the dataCoverageTables slot
 assessDataCompleteness <- function(aso) {
   dataCoverage <- list()
@@ -328,7 +328,7 @@ assessDataCompleteness <- function(aso) {
 
 
 #' This method optionally removes parameters that have a large amount of missing data, beyond specified levels.
-#' @parameter aso aso object initialized with parameter file, plate data and plate maps loaded.
+#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
 #' @returns returns the aso object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
 applyDataCoverageFilters <- function(aso) {
   # for each plate loop over paramters to check their coverage and apply limits

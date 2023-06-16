@@ -8,8 +8,6 @@
 #'
 #' @return returns a ggplot facet_wrap plot, max 4 columns, only parameters with more missing data than missingValLimit
 #' @export
-#'
-#' @examples
 missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) {
 
   missingData <- aso::missingDataReport(plate, plateSize)

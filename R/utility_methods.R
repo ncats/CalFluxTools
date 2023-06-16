@@ -21,8 +21,6 @@ addPlate <- function(plateset, plate, label) {
 #'
 #' @return a plate with updated plate data
 #' @export
-#'
-#' @examples
 filterLowDataParameters <- function(plate, thresholdType = 'well_count', missingDataThreshold = 10) {
 
   missingData <- missingDataReport(plate)
@@ -235,9 +233,11 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 }
 
 
-#' This method performs the imputation method on missing data. This is not typically part of the current data processing setps.
+#' This method performs the imputation method on missing data. This is not typically part of the current data processing steps.
 #' @param plateSet input plateset to work on
-#' @param pctMin take this percentile (input as a fraction) to select the percentile minimum values. Default is 0.01 (lowest 1%)
+#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1%
+#' @param colsToImpute the set of parameters or parameter abbreviations to impute.
+#' @return returns a plateSet object with imputed data values.
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   plates <- plateSet@plates
 
@@ -285,11 +285,10 @@ imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
 
 
 #' missingDataReport reports on plate missing values
-#'#' @param plate ASO plate
+#' @param plate ASO plate
 #' @param plateSize plate size, e.g. 384 (default)
-#'#' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
+#' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
 #' @export
-#' @examples
 missingDataReport <- function(plate, plateSize = 384) {
 
   df <- plate@plateData
@@ -328,8 +327,6 @@ missingDataReport <- function(plate, plateSize = 384) {
 #'
 #' @return returns a dataframe that summarizes the union of missing data across two referenced plates
 #' @export
-#'
-#' @examples
 platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
     # transform to plate dimensions
     # matrix multiply to get a result on which to report on 0's and NAs using missingDataReport on cloned plate
@@ -345,8 +342,6 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #'
 #' @return returns a copy of the plate having value substitutions for the discrete parameter
 #' @export
-#'
-#' @examples
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
 
@@ -370,8 +365,11 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
   return(plate)
 }
 
+#' A utility method to harmonize parameters across plates. Simply makes sure all plate reads contain the same parameters.
+#' @param plateSet the plateset to harmonize
+#' @returns a plateset object with various plate reads containing the same, consistent variables.
+#'
 harmonizeParametersAcrossPlates <- function(plateSet) {
-
   commonParams <- c()
   commonParamNames <- c()
   i = 1
@@ -400,9 +398,7 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
     plate@parameters <- commonParamNames
     plateSet@plates[[name]] <- plate
   }
-
   return(plateSet)
-
 }
 
 
@@ -414,17 +410,7 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
 #'
 #' @return returns a PlateSet object with an additional set of transformed data.
 #' @export
-#'
-#' @examples
 dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr = F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2) {
-
-  # bkgrndCorrected = F
-  #
-  # if(bkgrdCorr && !is.null(bkgrdSamples) && length(bkgrdSamples) > 0) {
-  #
-  #
-  #   bkgrndCorrected = T
-  # }
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
 
@@ -481,8 +467,6 @@ backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median
 #' @param paramater the measured parameter to report on
 #'
 #' @return returns a matrix with dimensions corresponding to plate type. A01 is in upper left.
-#'
-#' @examples
 rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
   plateData <- as.numeric(plate@plateData[,parameter])
   map = ""
@@ -503,8 +487,6 @@ rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
 #' @param paramaters the vector of measured parameter to report on
 #'
 #' @return Returns a list of plate matrix objects, named by each of the measured parameters in parameter
-#'
-#' @examples
 rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
 
   plateData <- plate@plateData[parameters]
@@ -536,8 +518,6 @@ rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
 #' @param plate The plate containing the data to be trimmed
 #'
 #' @return A copy of the plate containing data for the remaining wells.
-#'
-#' @examples
 getEdgeWellTrimmedMatrixFromPlate <- function(plate) {
   droppedWellIds <- grep("01", plate@wellIds)
   droppedWellIds <- union(grep("A", plate@wellIds), droppedWellIds)
@@ -553,8 +533,6 @@ getEdgeWellTrimmedMatrixFromPlate <- function(plate) {
 #' @param plateDim dimenstion of the plate
 #'
 #' @return returns a list with two entries with keys 'rows' and 'cols'
-#'
-#' @examples
 getRowAndColumnNames <- function(plateDim = 384) {
   rows <- LETTERS[seq(from = 1, to = 16)]
   cols <- seq(from = 1, to = 24)
@@ -576,7 +554,6 @@ getRowAndColumnNames <- function(plateDim = 384) {
 #' @param maxSaturationCount the number of points (plate wells) to fall off the returned scale (half will be off high end, half of these off the low end)
 #'
 #' @return returns a vector with two numeric values, a low-end cutoff and a high-end cutoff, in that order
-#' @examples
 getPlateValueCutoffs <- function(plateMatrix, maxSaturationCount = 10) {
   vals <- unlist(plateMatrix)
 

@@ -6,6 +6,9 @@
 \usage{
 parse_individual_plate(plate)
 }
+\arguments{
+\item{plate}{the plate statistic list}
+}
 \value{
 parsed plate data
 }
