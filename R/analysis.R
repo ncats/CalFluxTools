@@ -717,7 +717,7 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
   reducedPlateMap = splicedData[, 1:ncol(plateMap)]
 
   #create dataframe with test data that does not include plate map
-  testDataSplice = splicedData %>% select(ncol(plateMap):last_col())
+  testDataSplice = splicedData %>% dplyr:::select(ncol(plateMap):last_col())
   testDataSpliceVar = testDataSplice[ , which(apply(testDataSplice, 2, var) != 0)]
   #transpose
   testDataSpliceT = t(testDataSplice)

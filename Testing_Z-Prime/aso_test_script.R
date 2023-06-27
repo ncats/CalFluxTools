@@ -1,6 +1,8 @@
 library(aso)
 library(DT)
 library(ggplot2)
+library(readr)
+library(dplyr)
 library(plotly)
 library(lme4)
 library(janitor)
@@ -30,8 +32,11 @@ splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
 splicedDataClean = splicedData[splicedData$WellType == 'Test',]
 
-splicedDataCleanT = t(splicedDataClean)
+splicedDataCleanT = t(splicedDataClean) %>% as.data.frame()
+
 splicedDataCleanT = splicedDataCleanT %>% row_to_names(row_number = 1)
+
+splicedDataClean = t(splicedDataCleanT) %>% as.data.frame()
 
 pval_thresh = 0.05
 
@@ -81,6 +86,7 @@ if(!exists('asoConcLME')){
                                rep('Conc30', length(aso_concentration_30)),
                                rep('Conc60', length(aso_concentration_60))))
     colnames(df)[1] = "y"
+    df$y = as.numeric(df$y)
     fit.null = lmer(y ~ (1|categ), data = df, REML = FALSE)
     fit = lmer(y ~ status + (1|categ), data = df, REML = FALSE)
     anovaFit = anova(fit.null, fit)
@@ -88,13 +94,20 @@ if(!exists('asoConcLME')){
   })
 }
 
-print("hello")
+
 
 
 for(i in 1:length(unique(plateMapClean$Concentration))){
   #Maybe think about making this more generalizable to potentially different concentrations
   #thoughts for later
 }
+
+
+
+
+
+
+
 
 
 
