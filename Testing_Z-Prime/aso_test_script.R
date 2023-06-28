@@ -6,6 +6,17 @@ library(dplyr)
 library(plotly)
 library(lme4)
 library(janitor)
+library(devtools)
+library(plotly)
+library(kpodclustr)
+library(tidyverse)
+library(ggcorrplot)
+library(caret)
+library(randomForest)
+library(readxl)
+library(Boruta)
+library(umap)
+
 
 # edit this working directory location for your directory that has the data
 setwd("/Users/danyalepic/Desktop/NIH_VSOAR_2023/aso/Testing_Z-Prime")
@@ -14,6 +25,96 @@ parameterFile <-"FLIPR_Analysis_parameters_Run_7_New_Replacement_Options.xlsx"
 # this builds the aso data and exports all the qc files and transformed data
 aso <- aso:::runDataProcessing(parameterFile)
 
+#all of the below is using Andy's Random Forest but adding concentration
+
+data_imputed<-aso@plateSet@transformedPlateData[[1]]
+sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+data_imputed <- data_imputed[which(sample_info$Compound!="Empty"),]
+sample_info <- sample_info %>%
+  filter(Compound!="Empty")
+data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
+
+#Variable Correlations
+corr <- round(cor(data_imputed), 1)
+ggcorrplot(corr, method = "circle", hc.order="TRUE")
+
+#Andy's PCA
+pca_res <- prcomp(data_imputed, scale.=TRUE)
+pca_df <- pca_res$x[,1:2] %>%
+  as.data.frame() %>%
+  mutate(WellType = sample_info$WellType) %>%
+  mutate(Compound = sample_info$Compound) %>%
+  mutate(Concentration = as.character(sample_info$Concentration))
+
+p <- ggplot(pca_df, aes(x=PC1,y=PC2,color=Compound)) +
+  geom_point(aes(text=paste0("Well Type: ",WellType, "\nConcentration: ",Concentration))) + theme_classic()
+ggplotly(p,tooltip=c("text","color","shape"))
+
+#UMAP
+umap_res <- umap(data_imputed)
+umap_df <- umap_res$layout %>%
+  as.data.frame() %>%
+  mutate(WellType = sample_info$WellType) %>%
+  mutate(Compound = sample_info$Compound) %>%
+  mutate(Concentration = as.character(sample_info$Concentration))
+
+p <- ggplot(umap_df, aes(x=V1,y=V2,color=Compound)) +
+  geom_point(aes(text=paste0("Well: ",Well, "\nConcentration: ",Concentration))) + theme_classic()
+ggplotly(p,tooltip=c("text","color","shape"))
+
+
+#Danyal's Random Forest that includes concentration as a predictor
+
+data_labels <- pca_df$WellType
+training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+training_labels <- factor(data_labels[training_rows])
+training_data <- data_imputed[training_rows,] %>% as.data.frame
+training_data$label <-training_labels
+concentration_labels <- pca_df$Concentration[training_rows]
+new_training_data = cbind(concentration_labels, training_data)
+
+new_model <- train(label ~ .,
+               data = new_training_data,
+               method = "rf",
+               trControl = trainControl(method = "cv",number=10))
+
+testing_data <-  data_imputed[-training_rows,] %>% as.data.frame
+clean_conc_labels = pca_df$Concentration[-training_rows]
+new_testing_data = cbind(clean_conc_labels, testing_data)
+
+test_labels <- predict(new_model, newdata = new_testing_data)
+predictions <- data.frame(aso=pca_df$Compound[-training_rows],Concentration = pca_df$Concentration[-training_rows],
+                          class=test_labels)
+predictions %>% filter(class == "Positive Control")
+
+#Andy's original Random Forests Positive Predictions
+data_labels <- pca_df$WellType
+training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+training_labels <- factor(data_labels[training_rows])
+training_data <- data_imputed[training_rows,] %>% as.data.frame
+training_data$label <-training_labels
+
+model <- train(label ~ .,
+               data = training_data,
+               method = "rf",
+               trControl = trainControl(method = "cv",number=10))
+
+testing_data <-  data_imputed[-training_rows,] %>% as.data.frame
+test_labels <- predict(model, newdata = testing_data)
+predictions <- data.frame(aso=pca_df$Compound[-training_rows],Concentration = pca_df$Concentration[-training_rows],
+                          class=test_labels)
+predictions %>% filter(class == "Positive Control")
+
+#variable importance
+BorutaModel <- Boruta(label ~ .,
+                      data = training_data)
+plot(BorutaModel,las=2)
+
+
+
+
+# all of the below is the working progress for the LME
 plateTransformedData = aso@plateSet@transformedPlateData
 
 plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
