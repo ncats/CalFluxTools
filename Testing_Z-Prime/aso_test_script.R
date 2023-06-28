@@ -8,7 +8,6 @@ library(lme4)
 library(janitor)
 
 # edit this working directory location for your directory that has the data
-setwd("/Users/danyalepic/Desktop/NIH_VSOAR_2023/aso/Testing_Z-Prime")
 parameterFile <-"FLIPR_Analysis_parameters_Run_7_New_Replacement_Options.xlsx"
 
 # this builds the aso data and exports all the qc files and transformed data
@@ -76,6 +75,12 @@ aso_compound_60 = plateMapClean %>% filter(Concentration == 60) %>%
 
 #Current problem, column names are not actually the well names
 #Actually fixed this now!
+
+## Only use Positive/Negative control samples
+## Original: metabolite level [numeric] ~ mdm2 status [factor] + (1|cell line [factor])
+## Current: Parameter [numeric] ~ ASO [factor] + (1|concentration [factor])
+## Proposed: Positive/Negative outcome [factor] ~ . (all parameters, [numeric]) + (1|concentration [factor]) (or should this be ASO?)
+
 if(!exists('asoConcLME')){
   asoConcLME = sapply(c(ncol(plateMap):nrow(splicedDataCleanT)), function(x){
     df = data.frame(t(splicedDataCleanT[x,c(aso_concentration_3, aso_concentration_10,
