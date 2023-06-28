@@ -71,7 +71,7 @@ training_rows <- which(data_labels == "Positive Control" | data_labels == "Negat
 training_labels <- factor(data_labels[training_rows])
 training_data <- data_imputed[training_rows,] %>% as.data.frame
 training_data$label <-training_labels
-concentration_labels <- pca_df$Concentration[training_rows]
+concentration_labels <- as.numeric(pca_df$Concentration[training_rows])
 new_training_data = cbind(concentration_labels, training_data)
 
 new_model <- train(label ~ .,
@@ -80,13 +80,14 @@ new_model <- train(label ~ .,
                trControl = trainControl(method = "cv",number=10))
 
 testing_data <-  data_imputed[-training_rows,] %>% as.data.frame
-clean_conc_labels = pca_df$Concentration[-training_rows]
+clean_conc_labels = as.numeric(pca_df$Concentration[-training_rows])
 new_testing_data = cbind(clean_conc_labels, testing_data)
+colnames(new_testing_data)[1] = "concentration_labels"
 
-test_labels <- predict(new_model, newdata = new_testing_data)
-predictions <- data.frame(aso=pca_df$Compound[-training_rows],Concentration = pca_df$Concentration[-training_rows],
+new_test_labels <- predict(new_model, newdata = new_testing_data)
+new_predictions <- data.frame(aso=pca_df$Compound[-training_rows],Concentration = pca_df$Concentration[-training_rows],
                           class=test_labels)
-predictions %>% filter(class == "Positive Control")
+new_predictions %>% filter(class == "Positive Control")
 
 #Andy's original Random Forests Positive Predictions
 data_labels <- pca_df$WellType
