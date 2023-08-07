@@ -620,7 +620,7 @@ runPairedTTest <- function(aso) {
   return(df)
 }
 
-zFactor <- function(aso, dataType = 'transformed'){
+zFactor <- function(aso, dataType = 'transformed', masking = ""){
   # The @ is used to dereference
   # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
   # it's designed as a list or dictionary
@@ -646,6 +646,10 @@ zFactor <- function(aso, dataType = 'transformed'){
 
   # Created a data frame that does not contain empty wells
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  if(masking != ""){
+    splicedData = splicedData[splicedData$Well != masking,]
+  }
 
   # Create a data frame that only contains positive controls
   PosCtrl = splicedData[splicedData$WellType == "Positive Control",]
@@ -712,6 +716,15 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
 
   tableWithAnnotation <- cbind(plateMap, testData)
 
+  for(i in 1:nrow(tableWithAnnotation)){
+    if(tableWithAnnotation[i,"Compound"] == "M1_QIA"){
+      tableWithAnnotation[i,"Compound"] = "Positive Control"
+    }
+    if(tableWithAnnotation[i,"Compound"] == "Veh") {
+      tableWithAnnotation[i,"Compound"] = "Negative Control"
+    }
+  }
+
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
   reducedPlateMap = splicedData[, 1:ncol(plateMap)]
@@ -750,7 +763,8 @@ plotPCA = function(pcaList, pcaType = 1){
     pca_prop_var = (pcaList[[pcaType]]$sdev^2/sum(pcaList[[pcaType]]$sdev^2))
 
     pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-      geom_point(size = 3) + labs(title = plotTitle) +
+      geom_point(size = 3) +
+      labs(title = plotTitle) +
       xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
       ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
 
@@ -758,6 +772,7 @@ plotPCA = function(pcaList, pcaType = 1){
     plotTitle = 'Parameters PCA'
 
     labels = pcaList[['Parameter Names']]
+
 
     pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
       geom_point(size = 3) + labs(title = plotTitle) +
@@ -775,7 +790,7 @@ plotPCA = function(pcaList, pcaType = 1){
 }
 
 #' @export
-asoRandomForest = function(aso){
+asoRandomForest = function(aso, masking = ''){
   #Subsetting data
   data_imputed<-aso@plateSet@transformedPlateData[[1]]
   sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
@@ -793,6 +808,10 @@ asoRandomForest = function(aso){
     mutate(Compound = sample_info$Compound) %>%
     mutate(Well = sample_info$Well) %>%
     mutate(Concentration = as.character(sample_info$Concentration))
+
+  if(masking != ''){
+    pca_df = pca_df[pca_df$Well != masking,]
+  }
 
   #Subset data to get all required training data
   data_labels <- pca_df$WellType

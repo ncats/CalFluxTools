@@ -20,18 +20,24 @@ library(ComplexHeatmap)
 library(forcats)
 library(ggpubr)
 library(gridExtra)
+library(tibble)
+library(glmnet)
 
 
 # edit this working directory location for your directory that has the data
 setwd("/Users/danyalepic/Desktop/NIH_VSOAR_2023/aso/Testing_Z-Prime")
-parameterFile <-"FLIPR_Analysis_parameters_Run_9.2_BL_30_New_Replacement_Options.xlsx"
+parameterFile30 <-"FLIPR_Analysis_parameters_Run_9.2_BL_30_New_Replacement_Options.xlsx"
+parameterFile60 = "FLIPR_Analysis_parameters_Run_9.2_BL_60_New_Replacement_Options.xlsx"
+parameterFile90 = "FLIPR_Analysis_parameters_Run_9.2_BL_90_New_Replacement_Options.xlsx"
 
 # this builds the aso data and exports all the qc files and transformed data
-aso <- aso:::runDataProcessing(parameterFile)
+aso30 <- aso:::runDataProcessing(parameterFile30)
+aso60 = aso:::runDataProcessing(parameterFile60)
+aso90 = aso:::runDataProcessing(parameterFile90)
 
-plateTransformedData = aso@plateSet@transformedPlateData
+plateTransformedData = aso30@plateSet@transformedPlateData
 
-plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+plateMap <- aso30@plateSet@plates[[1]]@plateAnnotMap
 
 dataType = "transformed"
 
@@ -47,7 +53,25 @@ splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
 splicedDataClean = splicedData[splicedData$WellType == 'Test',]
 
-#Begin Logistic Regression Testing
+#Begin LASSO regression testing
+splicedDataTraining = splicedData[splicedData$WellType == 'Positive Control' |
+                                    splicedData$WellType == 'Negative Control',] %>%
+  subset(select = -c(Well, Compound, Spheroid, Mask, Concentration))
+
+for(i in 1:length(splicedDataTraining$WellType)){
+  if(splicedDataTraining$WellType[i] == "Positive Control"){
+    splicedDataTraining$WellType[i] = as.numeric(1)
+  } else {
+    splicedDataTraining$WellType[i] = as.numeric(0)
+  }
+}
+
+y = splicedDataTraining$WellType %>% as.numeric()
+x = data.matrix(splicedDataTraining[, -1])
+
+cv_model = cv.glmnet(x, y, alpha = 1)
+
+#Begin Logistic Regression Testing --> NOT WORKING, USING LASSO REGRESSION INSTEAD
 splicedDataTraining = splicedData[splicedData$WellType == 'Positive Control' |
                                     splicedData$WellType == 'Negative Control',] %>%
   subset(select = -c(Well, Compound, Spheroid, Mask, Concentration)) %>%
@@ -76,19 +100,69 @@ logisticPredictions = predict(logisticModel, newdata = splicedDataTesting, type 
 test_df = cbind(splicedDataTesting, logisticPredictions)
 
 #Testing pca for new data set
-new_pca = aso:::runPca(aso, dataType = "test", compoundIDList = c('M1_QIA', 'Veh', 'ASO1', 'ASO12'))
+new_pca = aso:::runPca(aso90, dataType = "test", compoundIDList = c('M1_QIA', 'Veh'))
 new_pca_plot = aso:::plotPCA(new_pca, pcaType = 1)
-new_pca_plot
+new_pca_plot = new_pca_plot + labs(title = "Wells PCA - 90 Minute") +
+  theme(axis.text = element_text(size=15)) + theme(axis.title = element_text(size=15)) +
+  theme(title = element_text(size = 15))
 
 #Testing ZPrime for new data set
 aso:::zFactor(aso)
 
+#Creating ZPrime Plot
+zPrimeList30 = aso:::zFactor(aso30) %>% rownames_to_column("Parameter")
+zPrimeList30 = zPrimeList30[, c("Parameter", "zFactor")]
+colnames(zPrimeList30)[2] = "zFactor30"
+
+zPrimeList60 = aso:::zFactor(aso60)
+zPrimeList60 = zPrimeList60[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList60)[1] = "zFactor60 Original"
+
+zPrimeList60Mask = aso:::zFactor(aso60, masking = "H15")
+zPrimeList60Mask = zPrimeList60Mask[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList60Mask)[1] = "zFactor60 QC"
+
+zPrimeList90 = aso:::zFactor(aso90)
+zPrimeList90 = zPrimeList90[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList90)[1] = "zFactor90"
+
+zPrimeList = cbind(zPrimeList30, zPrimeList60, zPrimeList60Mask, zPrimeList90)
+zPrimeData = data.frame(matrix(NA, nrow = 4* nrow(zPrimeList), ncol = 3))
+
+zPrimeData[1:16, 1] = "30'"
+zPrimeData[17:32, 1] = "60'"
+zPrimeData[33:48, 1] = "60' QC"
+zPrimeData[49:64, 1] = "90'"
+
+colnames(zPrimeData)[1] = "Time"
+colnames(zPrimeData)[2] = "Value"
+colnames(zPrimeData)[3] = "Parameter"
+
+zPrimeData[1:16, 2] = zPrimeList[,2]
+zPrimeData[17:32, 2] = zPrimeList[,3]
+zPrimeData[33:48, 2] = zPrimeList[,4]
+zPrimeData[49:64, 2] = zPrimeList[,5]
+
+zPrimeData[1:16, 3] = zPrimeList[,1]
+zPrimeData[17:32, 3] = zPrimeList[,1]
+zPrimeData[33:48, 3] = zPrimeList[,1]
+zPrimeData[49:64, 3] = zPrimeList[,1]
+
+zPrimePlot = ggplot(data = zPrimeData, aes(x = Time, y = Value, color = Parameter)) +
+  geom_point(size = 3) + ylab("Z Prime Value") + ggtitle("Z Prime Statistic - Quality Control") +
+  annotate('rect', xmin = 0, xmax = 5, ymin = 0.5, ymax = 1, fill = 'green', alpha = 0.2) +
+  annotate('rect', xmin = 0, xmax = 5, ymin = 0, ymax = 0.5, fill = 'yellow', alpha = 0.2) +
+  annotate('rect', xmin = 0, xmax = 5, ymin = -2, ymax = 0, fill = 'red', alpha = 0.2) +
+  geom_jitter(width = 0.2, size = 3) + theme(axis.text = element_text(size=15)) +
+  theme(axis.title = element_text(size=15)) + theme(title = element_text(size = 15))
+
+
 #Testing implementation of random forest function, NOT WORKING RIGHT NOW, NEED HELP
-aso:::asoRandomForest(aso)
+aso:::asoRandomForest(aso60)
 
 #Begin method implementation for random forest
-data_imputed<-aso@plateSet@transformedPlateData[[1]]
-sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
+data_imputed<-aso60@plateSet@transformedPlateData[[1]]
+sample_info <- aso60@plateSet@plates[[1]]@plateAnnotMap
 
 data_imputed <- data_imputed[which(sample_info$Compound!="Empty"),]
 sample_info <- sample_info %>%
