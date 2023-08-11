@@ -233,9 +233,10 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 }
 
 
-#' This method performs the imputation method on missing data. This is not typically part of the current data processing steps.
+#' This method performs the imputation method on missing data.
+#' This is not typically part of the current data processing steps.
 #' @param plateSet input plateset to work on
-#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1%
+#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1 percent.
 #' @param colsToImpute the set of parameters or parameter abbreviations to impute.
 #' @return returns a plateSet object with imputed data values.
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {

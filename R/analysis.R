@@ -804,6 +804,10 @@ plotPCA = function(pcaList, pcaType = 1){
 
 }
 
+#' generatees random forest predictions for ASOs
+#' @param aso an aso object containing transformed data that's ready for analysis
+#' @param masking list of wells to optionally mask
+#' @returns creates a prediction heatmap and dot plot, returns a Heatmap object.
 #' @export
 asoRandomForest = function(aso, masking = ''){
   #Subsetting data

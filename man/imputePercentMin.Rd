@@ -2,14 +2,15 @@
 % Please edit documentation in R/utility_methods.R
 \name{imputePercentMin}
 \alias{imputePercentMin}
-\title{This method performs the imputation method on missing data. This is not typically part of the current data processing steps.}
+\title{This method performs the imputation method on missing data.
+This is not typically part of the current data processing steps.}
 \usage{
 imputePercentMin(plateSet, pctMin = 0.01, colsToImpute)
 }
 \arguments{
 \item{plateSet}{input plateset to work on}
 
-\item{pctMin}{take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1%}
+\item{pctMin}{take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1 percent.}
 
 \item{colsToImpute}{the set of parameters or parameter abbreviations to impute.}
 }
@@ -17,5 +18,6 @@ imputePercentMin(plateSet, pctMin = 0.01, colsToImpute)
 returns a plateSet object with imputed data values.
 }
 \description{
-This method performs the imputation method on missing data. This is not typically part of the current data processing steps.
+This method performs the imputation method on missing data.
+This is not typically part of the current data processing steps.
 }
