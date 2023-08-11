@@ -635,5 +635,324 @@ runPairedTTest <- function(aso) {
   return(df)
 }
 
+zFactor <- function(aso, dataType = 'transformed', masking = ""){
+  # The @ is used to dereference
+  # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
+  # it's designed as a list or dictionary
+  plateTransformedData <- aso@plateSet@transformedPlateData
 
+  # an R list object is dereferenced using double brackets
+  # you can refer to a member of the list by name or by index. *R indexing starts at 1
+  if(dataType == 'transformed'){
+    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+  } else {
+    testData <- aso@plateSet@plates[[2]]@plateData
+  }
+  # the platemap holds well annotations, it's a dataframe
+  # this gets the plateset from the aso object, plate list, takes the first plate, and then
+  # the plateAnnotationMap field.
+  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  # an alternative to viewing a table is using the 'Global Envionment' in the upper right window.
+  # if the variable is a data.frame, click on the table icon on the far right to view the data.
+
+  # Combines plateMap and transformedData
+  tableWithAnnotation <- cbind(plateMap, testData)
+
+  # Created a data frame that does not contain empty wells
+  splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  if(masking != ""){
+    splicedData = splicedData[splicedData$Well != masking,]
+  }
+
+  # Create a data frame that only contains positive controls
+  PosCtrl = splicedData[splicedData$WellType == "Positive Control",]
+  # unique(PosCtrl$WellType)
+
+  # Create a data frame that only contains negative controls
+  NegCtrl = splicedData[splicedData$WellType == "Negative Control",]
+  # unique(NegCtrl$WellType)
+
+  # make means and sds data frame for both controls
+  numericPosCtrl <- data.frame(sapply(PosCtrl[,(ncol(plateMap)+1):ncol(PosCtrl)], as.numeric))
+  allUPosCtrl <- colMeans(numericPosCtrl)
+  allSDPosCtrl <- sapply(numericPosCtrl, sd)
+
+  numericNegCtrl <- data.frame(sapply(NegCtrl[,(ncol(plateMap)+1):ncol(NegCtrl)], as.numeric))
+  allUNegCtrl <- colMeans(numericNegCtrl)
+  allSDNegCtrl <- sapply(numericNegCtrl, sd)
+
+  zFactor = 1 - ((3*(allSDPosCtrl+allSDNegCtrl))/(abs(allUPosCtrl - allUNegCtrl)))
+
+  coeffVarPosCtrl = allSDPosCtrl/abs(allUPosCtrl)
+  coeffVarNegCtrl = allSDNegCtrl/abs(allUNegCtrl)
+
+  # make a data frame with all means, sds, and zFactor and cbind them together
+  zFactorTable <- cbind(data.frame(allUPosCtrl), data.frame(allSDPosCtrl), data.frame(coeffVarPosCtrl),
+        data.frame(allUNegCtrl), data.frame(allSDNegCtrl), data.frame(coeffVarNegCtrl),
+        data.frame(zFactor))
+
+  return(zFactorTable)
+}
+
+zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
+  # Make a list
+  zPrimeList <- list()
+
+  # First call to zFactor calculation to calculate for transformed data
+  zPrimeList[['transformedDataResults']] <- aso:::zFactor(aso)
+
+  # Second call to zFactor to calculate for raw data
+  zPrimeList[['rawDataResults']] <- aso:::zFactor(aso, 'experimental')
+
+  # Write to an Excel file
+  openxlsx::write.xlsx(zPrimeList,
+                       file = paste0('zPrimeResults_', Sys.time(), '.xlsx'),
+                       rowNames = TRUE)
+
+  return(zPrimeList)
+  }
+
+runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
+  plateTransformedData = aso@plateSet@transformedPlateData
+
+  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  if(dataType == 'transformed'){
+    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+  } else if (dataType == "raw"){
+    testData <- aso@plateSet@plates[[2]]@plateData
+  } else {
+    testData = plateTransformedData[[1]]
+    testData = testData[plateMap$Compound %in% compoundIDList,]
+    plateMap = plateMap[plateMap$Compound %in% compoundIDList,]
+  }
+
+  tableWithAnnotation <- cbind(plateMap, testData)
+
+  for(i in 1:nrow(tableWithAnnotation)){
+    if(tableWithAnnotation[i,"Compound"] == "M1_QIA"){
+      tableWithAnnotation[i,"Compound"] = "Positive Control"
+    }
+    if(tableWithAnnotation[i,"Compound"] == "Veh") {
+      tableWithAnnotation[i,"Compound"] = "Negative Control"
+    }
+  }
+
+  splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  reducedPlateMap = splicedData[, 1:ncol(plateMap)]
+
+  #create dataframe with test data that does not include plate map
+  testDataSplice = splicedData %>% dplyr:::select(ncol(plateMap):last_col())
+  testDataSpliceVar = testDataSplice[ , which(apply(testDataSplice, 2, var) != 0)]
+  #transpose
+  testDataSpliceT = t(testDataSplice)
+  #transposition caused columns with zero variance, remove those
+  testDataSpliceTvar = testDataSpliceT[ , which(apply(testDataSpliceT, 2, var) != 0)]
+
+  pcaASO = prcomp(na.omit(testDataSpliceVar), center = TRUE, scale. = TRUE, retx = TRUE)
+  pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = TRUE, retx = TRUE)
+
+  pcaList = list()
+  pcaList[['Wells PCA']] = pcaASO
+  pcaList[['Parameters PCA']] = pcaASOT
+
+  #add something in the list to add the annotation
+  pcaList[['Annotations']] = reducedPlateMap
+  pcaList[['Parameter Names']] = colnames(testData)
+
+
+  return(pcaList)
+
+}
+
+plotPCA = function(pcaList, pcaType = 1){
+
+  if(pcaType == 1){
+    plotTitle = 'Wells PCA'
+
+    labels = pcaList[['Annotations']]$Compound
+
+    pca_prop_var = (pcaList[[pcaType]]$sdev^2/sum(pcaList[[pcaType]]$sdev^2))
+
+    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+      geom_point(size = 3) +
+      labs(title = plotTitle) +
+      xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
+      ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+
+  } else {
+    plotTitle = 'Parameters PCA'
+
+    labels = pcaList[['Parameter Names']]
+
+
+    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+      geom_point(size = 3) + labs(title = plotTitle) +
+      xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 3), "% of var.)")) +
+      ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 3), "% of var.)"))
+
+  }
+
+  pdf(file = 'PCA.pdf')
+  print(pcaPlot)
+  dev.off()
+
+  return(pcaPlot)
+
+}
+
+#' @export
+asoRandomForest = function(aso, masking = ''){
+  #Subsetting data
+  data_imputed<-aso@plateSet@transformedPlateData[[1]]
+  sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
+
+  data_imputed <- data_imputed[which(sample_info$Compound!="Empty"),]
+  sample_info <- sample_info %>%
+    filter(Compound!="Empty")
+  data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
+
+  #Build a data table that contains required data (can be updated)
+  pca_res <- prcomp(data_imputed, scale.=TRUE)
+  pca_df <- pca_res$x[,1:2] %>%
+    as.data.frame() %>%
+    mutate(WellType = sample_info$WellType) %>%
+    mutate(Compound = sample_info$Compound) %>%
+    mutate(Well = sample_info$Well) %>%
+    mutate(Concentration = as.character(sample_info$Concentration))
+
+  if(masking != ''){
+    pca_df = pca_df[pca_df$Well != masking,]
+  }
+
+  #Subset data to get all required training data
+  data_labels <- pca_df$WellType
+  training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+  training_labels <- factor(data_labels[training_rows])
+  training_data <- data_imputed[training_rows,] %>% as.data.frame
+  training_data$label <-training_labels
+  concentration_labels <- as.numeric(pca_df$Concentration[training_rows])
+  new_training_data = cbind(concentration_labels, training_data)
+
+  #Generate new labels that are numeric (between 0 and 1)
+  cont_training_data = new_training_data
+  updated_labels = data.frame()
+  for(i in 1:length(cont_training_data$concentration_labels)){
+    if(cont_training_data$label[i] == "Positive Control"){
+      updated_labels[i,1] = as.numeric(1)
+    } else {
+      updated_labels[i,1] = as.numeric(0)
+    }
+  }
+
+  #Remove old label column and add new label column
+  colnames(updated_labels) = "label"
+  cont_training_data = subset(cont_training_data, select = -label)
+  cont_training_data = cbind(cont_training_data, updated_labels)
+
+  #Train model
+  new_model <- train(label ~ .,
+                     data =  cont_training_data,
+                     method = "rf",
+                     trControl = trainControl(method = "cv",number=10))
+
+  #Subset data for testing
+  testing_rows = which(data_labels == 'Test' & pca_df$Compound != 'PBS')
+  testing_data <-  data_imputed[testing_rows,] %>% as.data.frame
+  clean_conc_labels = as.numeric(pca_df$Concentration[testing_rows])
+  new_testing_data = cbind(clean_conc_labels, testing_data)
+  colnames(new_testing_data)[1] = "concentration_labels"
+
+  #Running the random forest
+  new_test_labels <- predict(new_model, newdata = new_testing_data)
+  new_predictions <- data.frame(aso=pca_df$Compound[testing_rows],Concentration = pca_df$Concentration[testing_rows],
+                                class=new_test_labels)
+
+  #Generating new data frames with numerical data
+  compound_list = unique(new_predictions$aso)
+
+  prediction_mean = data.frame()
+  prediction_sd = data.frame()
+
+  for(i in compound_list){
+    #create concentration list for each compound
+    conc_list = unique(new_predictions[new_predictions$aso == i, 'Concentration'])
+
+    for(j in conc_list){
+      #create class list for each concentration of each compound
+      class_df = new_predictions[new_predictions$aso == i & new_predictions$Concentration == j, 'class'] %>%
+        as.numeric %>%
+        as.data.frame()
+
+      #calculate average prediction and standard deviation
+      mean_class = mean(class_df$.)
+      sd_class = sd(class_df$.)
+
+      prediction_mean[i,j] = mean_class
+      prediction_sd[i,j] = sd_class
+
+    }
+  }
+
+  #Generating Heatmap, exported as pdf
+  pred_heatmap = Heatmap(as.matrix(prediction_mean), rect_gp = gpar(col = "white", lwd = 2),
+                         column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
+                         row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
+                         column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
+  pred_heatmap
+  pdf("ASOHeatmap.pdf")
+  print(pred_heatmap)
+  dev.off()
+
+  #Making the dotplots with error bars, exported as pdf
+  pred_plot_mean = t(prediction_mean) %>% as.data.frame()
+  pred_plot_mean = setNames(cbind(rownames(pred_plot_mean), pred_plot_mean,
+                                  row.names = NULL), c("Concentration", colnames(pred_plot_mean)))
+
+  pred_plot_sd = t(prediction_sd) %>% as.data.frame()
+  pred_plot_sd = setNames(cbind(rownames(pred_plot_sd), pred_plot_sd,
+                                row.names = NULL), c("Concentration", colnames(pred_plot_sd)))
+  pred_plot_sd = subset(pred_plot_sd, select = -Concentration)
+
+
+  for(i in 1:length(unique(colnames(pred_plot_sd)))){
+    if(!grepl("sd", colnames(pred_plot_sd)[i])){
+      colnames(pred_plot_sd)[i] = paste0("sd",colnames(pred_plot_sd)[i])
+    }
+  }
+
+  aso_plot_list = list()
+  for(i in 1:length(unique(new_predictions$aso))){
+
+    concDotPlot = ggplot(data = new_predictions[new_predictions$aso == paste0('ASO', i),],
+                         aes(x = Concentration, y = class)) +
+      geom_dotplot(binaxis = 'y', stackdir = 'center') +
+      stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                   geom="errorbar", color="red", width=0.2) +
+      ggtitle(paste0('ASO', i)) + aes(x = fct_inorder(Concentration)) + xlab("Concentration") +
+      coord_cartesian(ylim=c(-0.1, 1.1)) + scale_y_continuous(breaks=seq(0, 1, 0.25)) +
+      geom_point(size=2) + ylab('Prediction')
+
+    aso_plot_list[[i]] = concDotPlot
+
+  }
+
+  pdf("ASOConcPlots.pdf")
+  do.call(grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
+  do.call(grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
+  dev.off()
+
+  #Exporting data table with all numeric values for the heatmap and dotplots
+  pred_plot_df = cbind(pred_plot_mean, pred_plot_sd)
+
+  openxlsx::write.xlsx(pred_plot_df,
+                       file = paste0('RandomForestPredictions', Sys.time(), '.xlsx'),
+                       rowNames = TRUE)
+
+  return(pred_heatmap)
+
+}
 
