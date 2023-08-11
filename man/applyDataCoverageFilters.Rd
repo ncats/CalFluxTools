@@ -6,6 +6,9 @@
 \usage{
 applyDataCoverageFilters(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
 }

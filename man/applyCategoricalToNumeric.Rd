@@ -7,6 +7,9 @@ Note that this method will only run on parameters that are flagged as having cat
 \usage{
 applyCategoricalToNumeric(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
 }
