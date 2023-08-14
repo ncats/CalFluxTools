@@ -858,10 +858,10 @@ asoRandomForest = function(aso, masking = ''){
   cont_training_data = cbind(cont_training_data, updated_labels)
 
   #Train model
-  new_model <- train(label ~ .,
+  new_model <- caret::train(label ~ .,
                      data =  cont_training_data,
                      method = "rf",
-                     trControl = trainControl(method = "cv",number=10))
+                     trControl = caret::trainControl(method = "cv",number=10))
 
   #Subset data for testing
   testing_rows = which(data_labels == 'Test' & pca_df$Compound != 'PBS')
@@ -871,7 +871,7 @@ asoRandomForest = function(aso, masking = ''){
   colnames(new_testing_data)[1] = "concentration_labels"
 
   #Running the random forest
-  new_test_labels <- predict(new_model, newdata = new_testing_data)
+  new_test_labels <- stats::predict(new_model, newdata = new_testing_data)
   new_predictions <- data.frame(aso=pca_df$Compound[testing_rows],Concentration = pca_df$Concentration[testing_rows],
                                 class=new_test_labels)
 
@@ -902,7 +902,7 @@ asoRandomForest = function(aso, masking = ''){
   }
 
   #Generating Heatmap, exported as pdf
-  pred_heatmap = Heatmap(as.matrix(prediction_mean), rect_gp = gpar(col = "white", lwd = 2),
+  pred_heatmap = ComplexHeatmap::Heatmap(as.matrix(prediction_mean), rect_gp = grid::gpar(col = "white", lwd = 2),
                          column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
                          row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
                          column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
@@ -936,7 +936,7 @@ asoRandomForest = function(aso, masking = ''){
       geom_dotplot(binaxis = 'y', stackdir = 'center') +
       stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
                    geom="errorbar", color="red", width=0.2) +
-      ggtitle(paste0('ASO', i)) + aes(x = fct_inorder(Concentration)) + xlab("Concentration") +
+      ggtitle(paste0('ASO', i)) + aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
       coord_cartesian(ylim=c(-0.1, 1.1)) + scale_y_continuous(breaks=seq(0, 1, 0.25)) +
       geom_point(size=2) + ylab('Prediction')
 
@@ -945,8 +945,8 @@ asoRandomForest = function(aso, masking = ''){
   }
 
   pdf("ASOConcPlots.pdf")
-  do.call(grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
-  do.call(grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
+  do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
+  do.call(gridExtra::grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
   dev.off()
 
   #Exporting data table with all numeric values for the heatmap and dotplots

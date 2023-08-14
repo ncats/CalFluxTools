@@ -4,7 +4,7 @@
 ##' @author Andrew Patt
 ##' @export
 read_stemonix_data <- function(filename){
-  raw_data <- readr::read_file(filename, locale = locale(encoding = "ISO-8859-1"))
+  raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
   raw_data <- strsplit(raw_data,split='\t')[[1]]
   raw_data <- sapply(raw_data,function(x){
     if(identical(x,"")){
