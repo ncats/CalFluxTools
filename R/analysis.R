@@ -110,6 +110,8 @@ runDataProcessing <- function(asoParameterXlsxFilePath) {
 
   print("Analyis Done")
 
+  aso:::zFactorXlsx(aso)
+
   aso:::exportTransformedData(aso)
 
   # returns the aso data object
@@ -696,7 +698,8 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
   return(zFactorTable)
 }
 
-zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
+
+zFactorXlsx <- function(aso, fileName = 'zPrimeResults.xlsx'){
   # Make a list
   zPrimeList <- list()
 
@@ -708,13 +711,14 @@ zFactorXlsx <- function(fileName = 'zPrimeResults.xlsx'){
 
   # Write to an Excel file
   openxlsx::write.xlsx(zPrimeList,
-                       file = paste0('zPrimeResults_', Sys.time(), '.xlsx'),
+                       file = paste0(format(Sys.time(), 'zPrimeResults_%Y%m%d_%H%M'), '.xlsx'),
                        rowNames = TRUE)
 
   return(zPrimeList)
-  }
+}
 
-runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
+
+runPca = function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T){
   plateTransformedData = aso@plateSet@transformedPlateData
 
   plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
@@ -732,7 +736,7 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
   tableWithAnnotation <- cbind(plateMap, testData)
 
   for(i in 1:nrow(tableWithAnnotation)){
-    if(tableWithAnnotation[i,"Compound"] == "M1_QIA"){
+    if(tableWithAnnotation[i,"Compound"] == "M1_IDT"){
       tableWithAnnotation[i,"Compound"] = "Positive Control"
     }
     if(tableWithAnnotation[i,"Compound"] == "Veh") {
@@ -752,8 +756,8 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
   #transposition caused columns with zero variance, remove those
   testDataSpliceTvar = testDataSpliceT[ , which(apply(testDataSpliceT, 2, var) != 0)]
 
-  pcaASO = prcomp(na.omit(testDataSpliceVar), center = TRUE, scale. = TRUE, retx = TRUE)
-  pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = TRUE, retx = TRUE)
+  pcaASO = prcomp(na.omit(testDataSpliceVar), center = TRUE, scale. = scale, retx = TRUE)
+  pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = scale, retx = TRUE)
 
   pcaList = list()
   pcaList[['Wells PCA']] = pcaASO
@@ -768,7 +772,7 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL){
 
 }
 
-plotPCA = function(pcaList, pcaType = 1){
+plotPCA = function(pcaList, pcaType = 1, plotLoadings=F){
 
   if(pcaType == 1){
     plotTitle = 'Wells PCA'
@@ -777,26 +781,50 @@ plotPCA = function(pcaList, pcaType = 1){
 
     pca_prop_var = (pcaList[[pcaType]]$sdev^2/sum(pcaList[[pcaType]]$sdev^2))
 
-    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-      geom_point(size = 3) +
-      labs(title = plotTitle) +
-      xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
-      ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+    if(!plotLoadings) {
+      pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+        geom_point(size = 3) +
+        labs(title = plotTitle) +
+        xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
+        ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+    } else {
+
+      pcaProj <- pcaList[[pcaType]]$x
+      pcLoadings <- pcaList[[pcaType]]$rotation
+
+      xL <- unlist(pcLoadings[,1])
+      yL <- unlist(pcLoadings[,2])
+      loadData <- data.frame(xL, yL)
+
+      pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+        geom_point(size = 3) +
+        labs(title = plotTitle) +
+        xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
+        ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+
+      pcaPlot2 <- pcaPlot + geom_point(data=loadData, aes(x=xL,y=yL, color="blue"))
+
+
+    }
 
   } else {
     plotTitle = 'Parameters PCA'
 
     labels = pcaList[['Parameter Names']]
 
-
     pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
       geom_point(size = 3) + labs(title = plotTitle) +
       xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 3), "% of var.)")) +
       ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 3), "% of var.)"))
 
+
+    pcaPlot = pcaPlot()
+
   }
 
-  pdf(file = 'PCA.pdf')
+
+
+  pdf(file = paste0(format(Sys.time(),'PCA_%Y%m%d_%H%M_%S'),'.pdf'))
   print(pcaPlot)
   dev.off()
 
@@ -953,7 +981,7 @@ asoRandomForest = function(aso, masking = ''){
   pred_plot_df = cbind(pred_plot_mean, pred_plot_sd)
 
   openxlsx::write.xlsx(pred_plot_df,
-                       file = paste0('RandomForestPredictions', Sys.time(), '.xlsx'),
+                       file = paste0(format(Sys.time(),'RandomForestPredictions_%Y%m%d_%H%M'), '.xlsx'),
                        rowNames = TRUE)
 
   return(pred_heatmap)
