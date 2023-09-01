@@ -334,8 +334,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 #' @param tMethod the transformation method to export
 #' @return returns a grid of bar charts.
 getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows', tMethod = 'log2Ratio') {
-  print(is.character(samples))
-  print(samples == 'all')
+
   if(length(samples) == 1 && samples == 'all') {
     # get all compound annotations
     samples <- unique(plateSet@plates[[1]]@plateAnnotMap$Compound)

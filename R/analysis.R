@@ -113,7 +113,7 @@ processAsoData <- function(asoParameterXlsxFilePath) {
   setwd(origDir)
 
   # stop pointing to this analysis log
-  idleLog()
+  aso:::idleLog()
 
   return(aso)
 }
@@ -154,11 +154,17 @@ runDataProcessing <- function(aso) {
   # this step will optionally apply a mapping or conversion from text values to discrete numeric values.
   aso <- aso:::applyCategoricalToNumeric(aso)
 
+  print("completeness")
+
   logger::log_info("QC for data completeness.")
   # assess data completeness for each parameter. This holds information on how many plate values
   # are empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
   aso <- aso:::assessDataCompleteness(aso)
   logger::log_success("Finished QC for data completeness.")
+
+
+  print("completeness filter")
+
 
   logger::log_info("Applying data coverage filters")
   # the parameter file will specify how complete a parameter's data has to be in order to keep that parameter in the dataset.
@@ -167,9 +173,14 @@ runDataProcessing <- function(aso) {
   aso <- aso:::applyDataCoverageFilters(aso)
   logger::log_success("Finished applying data coverage filters")
 
+  print("export completeness filter")
+
   # export of the data coverage tables
   # this method will create an excel file that provides information on the data coverage assessment.
   aso:::exportDataCoverageReport(aso)
+
+  print("impute")
+
 
   logger::log_info("Imputing/replacing blanks and NAs")
   # apply optional N/A and blank value replacements
@@ -179,11 +190,16 @@ runDataProcessing <- function(aso) {
   aso <- aso:::replaceBlanksAndNAValues(aso)
   logger::log_success("Finished imputing/replacing blanks and NAs")
 
+
+  print("harmonize")
+
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
   # the experiments compare an ASO treatment plate read (plate data set) to an untreated (time=0) control plate read.
   # This method makes sure that after possibly filtering  out parameters, plate data sets (T=0 and experimental plate read)
   # both have the same parameters reported, in commmon.
   aso <- aso:::harmonizeParameters(aso)
+
+  print("BL QA")
 
   logger::log_info("Running reference baseline QA")
   # This method runs Quality Control checks on the reference plate data (T=0 plate)
@@ -195,23 +211,31 @@ runDataProcessing <- function(aso) {
   # for now, drop standard impute function
   # aso <- aso:::imputeData(aso)
 
+  print("transform")
+
+
   # run transformations on plate set plate-pairs
   # this compares the experimental condition data to the reference or control data.
   # This produces a new data frame/table that will report on the effect of treatment.
   # Currently we report the log2(experimental_condition_value/control_value), a log base 2 fold change.
   aso <- aso:::transformData(aso)
 
+  print("export plate views")
+
   # create optional plate view pdf.
   # this will show plate views for each paramter, in plate-format.
   # These can reveal wells that tend to be outliers.
   aso:::exportPlateViews(aso)
 
+  print("export transformed data")
   aso:::exportTransformedData(aso)
-
+  print("export bar charts")
   # create optional bar-chart
   # This exports the log2FoldChange (treatment effect) as bar charts.
   # Barcharts show treatment effect on the y-axis, and ASO concentration on the x-axis.
   aso:::exportBarCharts(aso)
+
+  print("ttest")
 
   # this runs a paired t-test to report on which wells show different values after treatment, for each parameter.
   # The method stores the result in an aso object.
@@ -222,6 +246,8 @@ runDataProcessing <- function(aso) {
 
   print("Analyis Done")
 
+  print("z prime")
+
   logger::log_info("Starting z-prime factor analysis of controls")
 
   aso:::zFactorXlsx(aso)
@@ -231,11 +257,11 @@ runDataProcessing <- function(aso) {
   fullPCA = aso:::runPCA(aso, dataType = 'transformed')
   controlPCA = aso:::runPCA(aso, dataType = 'controls')
 
-  aso:::plotPCA(pcaList=fullPCA, pcaType = 1, dataName = "all_wells")
-  aso:::plotPCA(pcaList=controlPCA, pcaType = 1, dataName = "control_wells")
+  aso:::plotPCA(aso=aso, pcaList=fullPCA, pcaType = 1, dataName = "all_wells")
+  aso:::plotPCA(aso=aso, pcaList=controlPCA, pcaType = 1, dataName = "control_wells")
 
-  aso:::plotPCA(pcaList=fullPCA, pcaType = 2, dataName = "parameters_all_wells")
-  aso:::plotPCA(pcaList=controlPCA, pcaType = 2, dataName = "parameters_control_wells")
+  aso:::plotPCA(aso=aso, pcaList=fullPCA, pcaType = 2, dataName = "parameters_all_wells")
+  aso:::plotPCA(aso=aso, pcaList=controlPCA, pcaType = 2, dataName = "parameters_control_wells")
 
   # run random forest
   aso:::asoRandomForest(aso)
@@ -565,17 +591,10 @@ transformData <- function(aso) {
   i = 1
   plateNames = c()
 
-  print("In transform data... number of plates")
-  print(length(aso@plateSet@plates))
-  print(length(names(aso@plateSet@plates)))
-  print(length(names(aso@plateSet@plates)))
-
   for(plateName in names(aso@plateSet@plates)) {
     plate <- aso@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
     if(i %% 2 == 0) {
-      print("running transform data for plateset ... should do this 1x for a single pair of plates")
-      print(plateNames)
       aso@plateSet <- dataTransform(aso@plateSet, platePair=plateNames, method = 'log2ratio', firstDataCol = 1)
       plateNames = c()
     }
@@ -868,8 +887,8 @@ runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T
     testData <- aso@plateSet@plates[[2]]@plateData
   } else if (dataType == "controls") {
 
-    posControlKey <- asoObj@methodParameters$analysis_params$Positive_Control_Key
-    negControlKey <- asoObj@methodParameters$analysis_params$Negative_Control_Key
+    posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
+    negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
     controlKeys <- c(posControlKey, negControlKey)
 
     testData = plateTransformedData[[1]]
@@ -925,7 +944,10 @@ runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T
 }
 
 
-plotPCA <- function(pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
+#'
+#' @import ggfortify
+#' @import ggplot2
+plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
 
   plotTitle = ""
 
@@ -1160,11 +1182,9 @@ asoRandomForest <- function(aso, masking = NULL){
 
   for(i in 1:length(uniqueASONames)){
 
-      asoName = uniqueASONames[i]
+    asoName = uniqueASONames[i]
 
-      print(paste0("Dot plot for ASO: ",asoName))
-
-      concDotPlot = ggplot(data = new_predictions[new_predictions$aso == asoName,],
+    concDotPlot = ggplot(data = new_predictions[new_predictions$aso == asoName,],
                          aes(x = Concentration, y = class)) +
       geom_dotplot(binaxis = 'y', stackdir = 'center') +
       stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
@@ -1173,12 +1193,8 @@ asoRandomForest <- function(aso, masking = NULL){
       coord_cartesian(ylim=c(-0.1, 1.1)) + scale_y_continuous(breaks=seq(0, 1, 0.25)) +
       geom_point(size=2) + ylab('Prediction')
 
-      # concDotPlot
-
     aso_plot_list[[i]] = concDotPlot
   }
-
-  print("STOP")
 
   fileName <- aso:::constructFileName(baseFileName = 'ASO_Tox_DotPlot', plateReadLabel = plateName, fileExtension=".pdf")
 
@@ -1190,11 +1206,10 @@ asoRandomForest <- function(aso, masking = NULL){
   for(page in 0:(pages-1)) {
     firstToPlot <- lastToPlot + 1
     lastToPlot <- firstToPlot + 5
-    print(paste0(firstToPlot, " : ", lastToPlot))
     if(lastToPlot > length(aso_plot_list)) {
       lastToPlot <- length(aso_plot_list)
     }
-    do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2))
+    suppressWarnings( do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2)) )
   }
 
   #do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))

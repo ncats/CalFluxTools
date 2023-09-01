@@ -850,9 +850,6 @@ exportTransformedData <- function(aso) {
   fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
                                 fileExtension = "xlsx")
 
-  print("exporting transformed data")
-  print(fileName)
-
   openxlsx::write.xlsx(dataList, file=fileName)
 }
 

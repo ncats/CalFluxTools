@@ -21,6 +21,7 @@ Imports:
     ggfortify,
     ggplot2,
     ggpubr,
+    ggrepel,
     grid,
     gridExtra,
     janitor,
