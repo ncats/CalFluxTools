@@ -1,4 +1,3 @@
-#S4 Plate Class
 
 #' @export
 setClass("plate", slots=list(
@@ -40,7 +39,26 @@ setClass("aso", slots=list(
   plateSet = 'plateset',
   parameterInfo = "data.frame",
   methodParameters = "list",
-  outputDirs = "vector"
+  outputDirs = "vector",
+  pcaResults = "list",
+  rfResults = "list"
 ))
+
+
+#' @export
+#' @import caret
+setClass("randomForest", slots=list(
+  model = "train",
+  predictions = "data.frame",
+  prediction_means = "data.frame",
+  prediction_sds = "data.frame"
+))
+
+#' @export
+setClass("pcaResult", slots=list(
+  controlWellsPCA = "list",
+  allWellsPCA = "list"
+))
+
 
 

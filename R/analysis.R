@@ -99,14 +99,22 @@ processAsoData <- function(asoParameterXlsxFilePath) {
 
       newASO <- runDataProcessing(newASO)
 
+      # capture the transformed plate data
       aso@plateSet@transformedPlateData[[names(aso@plateSet@plates)[i+1]]] <- newASO@plateSet@transformedPlateData[[1]]
 
-      platePairIndex <- platePairIndex + 1
+      # collect PCA Result
+      pcaResultList <- newASO@pcaResults
+      for(id in names(pcaResultList)) {
+        aso@pcaResults[[id]] <- pcaResultList[[id]]
+      }
 
-      # we should accumulate results into an ASO object to return
-      # capture the transformed data for each
-      # capture the QC plate coverage info
-      # updated plates for changes like removed parameters with low data
+      # collect Random Forest Result
+      rfResultList <- newASO@rfResults
+      for(id in names(rfResultList)) {
+        aso@rfResults[[id]] <- rfResultList[[id]]
+      }
+
+      platePairIndex <- platePairIndex + 1
     }
   }
 
@@ -244,7 +252,6 @@ runDataProcessing <- function(aso) {
   # exports the paired t-test results.
   aso:::exportPairedTTestResult(aso, ttDf, "file")
 
-  print("Analyis Done")
 
   print("z prime")
 
@@ -257,14 +264,23 @@ runDataProcessing <- function(aso) {
   fullPCA = aso:::runPCA(aso, dataType = 'transformed')
   controlPCA = aso:::runPCA(aso, dataType = 'controls')
 
+  # capture PCA results
+  plateReadName = aso@plateSet@plateNames[2]
+  pcaResult <- new("pcaResult")
+  pcaResult@allWellsPCA <- fullPCA
+  pcaResult@controlWellsPCA <- controlPCA
+  aso@pcaResults[[plateReadName]] <- pcaResult
+
   aso:::plotPCA(aso=aso, pcaList=fullPCA, pcaType = 1, dataName = "all_wells")
   aso:::plotPCA(aso=aso, pcaList=controlPCA, pcaType = 1, dataName = "control_wells")
-
   aso:::plotPCA(aso=aso, pcaList=fullPCA, pcaType = 2, dataName = "parameters_all_wells")
   aso:::plotPCA(aso=aso, pcaList=controlPCA, pcaType = 2, dataName = "parameters_control_wells")
 
+  print("start random forest")
   # run random forest
-  aso:::asoRandomForest(aso)
+  aso <- aso:::asoRandomForest(aso)
+
+  print("Analyis Done")
 
   # returns the aso data object
   return(aso)
@@ -971,12 +987,6 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
       if(dataName == "control_wells") {
         pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label=pcaList$Annotations$Well), max.overlaps=maxOverlap)
       }
-
-      # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-      #   geom_point(size = 3) +
-      #   labs(title = plotTitle) +
-      #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
-      #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
     } else {
 
       pcaProj <- pcaList[[pcaType]]$x
@@ -986,20 +996,10 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
       yL <- unlist(pcLoadings[,2])
       loadData <- data.frame(xL, yL)
 
-      # pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]])
-
       pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=pcaList$Annotations, color='Compound', loadings=T, label=F)
       if(dataName == "control_wells") {
         pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label=pcaList$Annotations$Well), max.overlaps=maxOverlap)
       }
-
-      # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-      #   geom_point(size = 3) +
-      #   labs(title = plotTitle) +
-      #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
-      #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
-      #
-      # pcaPlot2 <- pcaPlot + geom_point(data=loadData, aes(x=xL,y=yL, color="blue"))
     }
 
   } else {
@@ -1010,11 +1010,6 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
 
     pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=labels, color='param', loadings=F, label=F) +
       ggrepel::geom_text_repel(aes(label=labels$param), max.overlaps = maxOverlap)
-
-    # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-    #   geom_point(size = 3) + labs(title = plotTitle) +
-    #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 3), "% of var.)")) +
-    #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 3), "% of var.)"))
   }
 
   fileName = paste0(plotTitle,"_",dataName)
@@ -1027,12 +1022,16 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
   return(pcaPlot)
 }
 
+
 #' generatees random forest predictions for ASOs
 #' @param aso an aso object containing transformed data that's ready for analysis
 #' @param masking list of wells to optionally mask
 #' @returns creates a prediction heatmap and dot plot, returns a Heatmap object.
+#' @import dplyr
 #' @export
 asoRandomForest <- function(aso, masking = NULL){
+
+  rf = new("randomForest")
 
   plateName <- aso@plateSet@plateNames[2]
 
@@ -1047,8 +1046,8 @@ asoRandomForest <- function(aso, masking = NULL){
 
   # filter empty wells and masked wells
   sample_info <- sample_info %>%
-    filter(Compound!="Empty") %>%
-    filter(Mask!=1)
+    dplyr::filter(Compound!="Empty") %>%
+    dplyr::filter(Mask!=1)
 
   data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
 
@@ -1101,6 +1100,10 @@ asoRandomForest <- function(aso, masking = NULL){
                      method = "rf",
                      trControl = caret::trainControl(method = "cv",number=10))
 
+  # capture model
+  rf@model <- new_model
+
+
   #Subset data for testing
   testing_rows = which(data_labels == 'Test' & sample_info$Compound != 'PBS')
   testing_data <-  data_imputed[testing_rows,] %>% as.data.frame
@@ -1115,6 +1118,9 @@ asoRandomForest <- function(aso, masking = NULL){
   new_test_labels <- stats::predict(new_model, newdata = new_testing_data)
   new_predictions <- data.frame(aso=sample_info$Compound[testing_rows],Concentration = sample_info$Concentration[testing_rows],
                                 class=new_test_labels)
+
+  # capture well-level predictions
+  rf@predictions <- new_predictions
 
   #Generating new data frames with numerical data
   compound_list = unique(new_predictions$aso)
@@ -1141,6 +1147,10 @@ asoRandomForest <- function(aso, masking = NULL){
 
     }
   }
+
+  # capture prediction means and SDs
+  rf@prediction_means <- prediction_mean
+  rf@prediction_sds <- prediction_sd
 
   #Generating Heatmap, exported as pdf
   pred_heatmap = ComplexHeatmap::Heatmap(as.matrix(prediction_mean), rect_gp = grid::gpar(col = "white", lwd = 2),
@@ -1209,7 +1219,7 @@ asoRandomForest <- function(aso, masking = NULL){
     if(lastToPlot > length(aso_plot_list)) {
       lastToPlot <- length(aso_plot_list)
     }
-    suppressWarnings( do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2)) )
+    suppressMessages( do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2)) )
   }
 
   #do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
@@ -1226,7 +1236,44 @@ asoRandomForest <- function(aso, masking = NULL){
                        file = fileName,
                        rowNames = TRUE)
 
-  return(pred_heatmap)
+  aso@rfResults[[plateName]] <- rf
+
+  return(aso)
+}
+
+
+evaluateControlWellPCA(aso) {
+  pcaRes <- aso@pcaResults
+  posCtrlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
+  negCtrlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
+
+  for(id in names(pcaRes)) {
+    print(id)
+    pca <- pcaRes[[id]]@controlWellsPCA
+
+    posCntl <- pca$`Wells PCA`$x[pca$Annotations$WellType == posControlKey, 1]
+    negCntl <- pca$`Wells PCA`$x[pca$Annotations$WellType == negControlKey, 1]
+
+    posCntl <- posCntl + min(posCntl)
+    negCntl <- negCntl + min(negCntl)
+
+    zScoreNeg <- abs((negCntl - median(negCntl))/sd(negCntl))
+    zScorePos <- abs((posCntl - median(posCntl))/sd(posCntl))
+
+    zScoreNeg <- zScoreNeg[zScoreNeg > 1.5]
+    zScorePos <- zScorePos[zScorePos > 1.5]
+
+    print(length(zScorePos))
+    print(zScorePos)
+    print(length(zScoreNeg))
+    print(zScoreNeg)
+
+
+    # rework to just check pos to mean(pos) vs pos to mean(neg) and vice versa
+  }
 
 }
+
+
+
 
