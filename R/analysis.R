@@ -12,36 +12,138 @@ processData <- function() {
   aso:::buildAndProcessASO(file)
 }
 
+#' Wrapper method to process a data set possibly containing multiple file paires
+#' processes data, writes file outputs, returns an ASO object with processed data.
+#' @param asoParameterXlsxFilePath file path to param file
+#' @returns processed ASO object
+#' @export
+processAsoData <- function(asoParameterXlsxFilePath) {
+
+  aso:::initializeLog(logLevel = "TRACE")
+
+  logger::log_info(paste0("Reading input parameter excel file ===> ",asoParameterXlsxFilePath))
+    # parse parameter and analysis settings, builds initial aso object.
+  aso <- aso:::readAsoParameterFile(asoParameterXlsxFilePath)
+  logger::log_success("Finished reading input parameter excel file")
+
+  # set the root dir as the working directory
+  origDir <- getwd()
+  rootDir <- aso@methodParameters[['root_dir']]
+
+  logger::log_info(paste0("Working directory ==> ", rootDir))
+  setwd(paste0(rootDir))
+
+  logger::log_info("Loading plate data")
+  # loads the list of plate files specified in the parameter file and create file pairs
+  # creating a plate set
+  aso <- aso:::loadPlates(aso)
+  logger::log_success("Finished loading plate data")
+
+  logger::log_info("Loading plate map well annotations")
+  aso <- aso:::loadPlateMaps(aso)
+  logger::log_success("Finished loading plate map well annotations")
+
+  # the aso has all plate pairs specified
+  # loop through all plate pairs in the plate set.
+  numberOfPlates <- length(aso@plateSet@plates)
+
+  logger::log_info(paste0("Number of plate pairs to process: ",numberOfPlates/2))
+
+  platePairIndex = 1
+  for(i in 1:numberOfPlates) {
+    if(i %% 2 == 1) {
+
+      # set the ouput dir
+      outDir <- paste0(rootDir, aso@outputDirs[[i]])
+      if(!dir.exists(outDir)) {
+        dir.create(outDir)
+      }
+
+      setwd(outDir)
+
+      logger::log_info("")
+      logger::log_info("###############")
+      logger::log_info(paste0("Processing plate pair: ",platePairIndex))
+      logger::log_info(paste0("Output directory: ", outDir))
+
+      newASO <- aso
+      # assign(x="newASO", value=aso)
+
+      # check to see if we have a copy of our aso object
+      # print("Don't have ASO copy????")
+      # if(tracemem(newASO) == tracemem(aso)) {
+      #   print("Same ASO")
+      #   print(tracemem(newASO))
+      #   print(tracemem(aso))
+      # } else {
+      #   print("Different ASO")
+      # }
+
+      newPlateSet <- subsetPlateSet(newASO@plateSet, plateIndicesToKeep = c(i, i+1))
+      newASO@plateSet <- newPlateSet
+
+      # print("aso and newASO plate count")
+      # print(length(aso@plateSet@plates))
+      # print(length(newASO@plateSet@plates))
+      #
+      # print("plate names for this iteration:")
+      # print(newASO@plateSet@plateNames)
+
+      # print("number of transformed data frames and t names")
+      # print(length(aso@plateSet@transformedPlateData))
+      # print(length(aso@plateSet@transformationNames))
+#
+#       print("Running a processing iteration, iter = plate read count...")
+#       print(i)
+#       print(length(newASO@plateSet@plates))
+
+      newASO <- runDataProcessing(newASO)
+
+      aso@plateSet@transformedPlateData[[names(aso@plateSet@plates)[i+1]]] <- newASO@plateSet@transformedPlateData[[1]]
+
+      platePairIndex <- platePairIndex + 1
+
+      # we should accumulate results into an ASO object to return
+      # capture the transformed data for each
+      # capture the QC plate coverage info
+      # updated plates for changes like removed parameters with low data
+    }
+  }
+
+  setwd(origDir)
+
+  # stop pointing to this analysis log
+  idleLog()
+
+  return(aso)
+}
 
 #' This method is a wrapper method that performs all data processing operations according to the supplied ASO Parameter File.
 #' The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.
 #' @param asoParamterXlsxFilePath a file path and file name for the ASO parameter xlsx file. All information required to process aso data is contained in this file.
 #' @returns Returns an aso objecdt with loaded and transformed data. During processing several output summary files will be exported.
 #' @export
-runDataProcessing <- function(asoParameterXlsxFilePath) {
+runDataProcessing <- function(aso) {
 
-  # parse parameter and analysis settings, builds initial aso object.
-  aso <- aso:::readAsoParameterFile(asoParameterXlsxFilePath)
-
-  # loads the list of plate files specified in the parameter file and create file pairs
-  # creating a plate set
-  aso <- aso:::loadPlates(aso)
+  logger::log_info("Starting Data Processing and Analysis methods")
 
   # AUC parameter names in the plate data file tend to have Japanese Kanji encoded as unicode.
   # This method replaces those parameter names with a standardized text, just a patch
   aso <- aso:::aucParameterPatch(aso)
 
-  # loads plate map files that identify the samples and conditions associated with each plate well.
-  aso <- aso:::loadPlateMaps(aso)
-
+  logger::log_info("Masking empty and masked wells.")
   # this method uses well annotations from the plate map to convert data from 'empty' wells
   # or wells that shouldn't be use, from numeric values to NaN (not-a-number values)
   aso <- aso:::maskEmptyWells(aso)
+  logger::log_success("Masked empty and masked wells.")
 
+  logger::log_info("Filtering to selected parameters")
   # users may select to only use some of the input parameters
   # this method removes data for parameters that should not be used (based on the parameter file)
   # only the key parameter's data will move on.
+  logger::log_info("Selected parameters:")
   aso <- aso:::fiterToSelectedParameters(aso)
+  logger::log_success("Filtered to selected parameters.")
 
   # Users can specify a short abbreviation to replace the full parameter names.
   # The parameter file can hold these abbreviations and set these abbreviations to be used in output instead of the longer parameter names.
@@ -52,24 +154,30 @@ runDataProcessing <- function(asoParameterXlsxFilePath) {
   # this step will optionally apply a mapping or conversion from text values to discrete numeric values.
   aso <- aso:::applyCategoricalToNumeric(aso)
 
+  logger::log_info("QC for data completeness.")
   # assess data completeness for each parameter. This holds information on how many plate values
   # are empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
   aso <- aso:::assessDataCompleteness(aso)
+  logger::log_success("Finished QC for data completeness.")
 
+  logger::log_info("Applying data coverage filters")
   # the parameter file will specify how complete a parameter's data has to be in order to keep that parameter in the dataset.
   # if a given parameter has very sparse data, it may be best to exclude that parameter for downstream analysis.
   # A user threshold determines how much missing data can be tolerated.
   aso <- aso:::applyDataCoverageFilters(aso)
+  logger::log_success("Finished applying data coverage filters")
 
   # export of the data coverage tables
   # this method will create an excel file that provides information on the data coverage assessment.
   aso:::exportDataCoverageReport(aso)
 
+  logger::log_info("Imputing/replacing blanks and NAs")
   # apply optional N/A and blank value replacements
   # some parameters can have values of 'N/A' or 'Blank'.
   # The lab has asked for a way to replace these values. The drop-in value or techinque for replacement is specified in the paramter input file.
   # replacement of these values is optional for each parameter.
   aso <- aso:::replaceBlanksAndNAValues(aso)
+  logger::log_success("Finished imputing/replacing blanks and NAs")
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
   # the experiments compare an ASO treatment plate read (plate data set) to an untreated (time=0) control plate read.
@@ -77,9 +185,11 @@ runDataProcessing <- function(asoParameterXlsxFilePath) {
   # both have the same parameters reported, in commmon.
   aso <- aso:::harmonizeParameters(aso)
 
+  logger::log_info("Running reference baseline QA")
   # This method runs Quality Control checks on the reference plate data (T=0 plate)
   # This will report on things like parameter variability, and wells that tend to be outliers, perahps having bad data (a bad well)
   aso <- aso:::runQcForReferencePlate(aso)
+  logger::log_success("Finished reference baseline QA")
 
   # now impute existing missing data as specified in input parameters
   # for now, drop standard impute function
@@ -96,6 +206,8 @@ runDataProcessing <- function(asoParameterXlsxFilePath) {
   # These can reveal wells that tend to be outliers.
   aso:::exportPlateViews(aso)
 
+  aso:::exportTransformedData(aso)
+
   # create optional bar-chart
   # This exports the log2FoldChange (treatment effect) as bar charts.
   # Barcharts show treatment effect on the y-axis, and ASO concentration on the x-axis.
@@ -110,9 +222,23 @@ runDataProcessing <- function(asoParameterXlsxFilePath) {
 
   print("Analyis Done")
 
+  logger::log_info("Starting z-prime factor analysis of controls")
+
   aso:::zFactorXlsx(aso)
 
-  aso:::exportTransformedData(aso)
+  logger::log_success("Finished z-prime factor analysis of controls")
+
+  fullPCA = aso:::runPCA(aso, dataType = 'transformed')
+  controlPCA = aso:::runPCA(aso, dataType = 'controls')
+
+  aso:::plotPCA(pcaList=fullPCA, pcaType = 1, dataName = "all_wells")
+  aso:::plotPCA(pcaList=controlPCA, pcaType = 1, dataName = "control_wells")
+
+  aso:::plotPCA(pcaList=fullPCA, pcaType = 2, dataName = "parameters_all_wells")
+  aso:::plotPCA(pcaList=controlPCA, pcaType = 2, dataName = "parameters_control_wells")
+
+  # run random forest
+  aso:::asoRandomForest(aso)
 
   # returns the aso data object
   return(aso)
@@ -130,11 +256,9 @@ loadPlates <- function(aso) {
   dir <- aso@methodParameters[['root_dir']]
 
   for(platename in names(fileList)) {
-    #print(paste0("adding new plate with name: ",platename))
     file <- fileList[[platename]]
     plate <- aso::read_stemonix_data(filename=paste0(dir,file))
     plateSet <- aso::addPlate(plateSet, plate, platename)
-    #print(paste0("added plate from: ",dir,file))
   }
   # add the plateset
   aso@plateSet <- plateSet
@@ -306,9 +430,6 @@ assessDataCompleteness <- function(aso) {
   plates <- aso@plateSet@plates
   pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c(1,2)]
 
-  print("pInfo... use params for assessments...data cov")
-  print(dim(pInfo))
-
   for(platename in names(plates)) {
     plate <- plates[[platename]]
     missingValReport <- missingDataReport(plate=plate, plateSize=plate@format)
@@ -381,9 +502,13 @@ applyDataCoverageFilters <- function(aso) {
 #' @param aso the aso object containing pre-computed data coverage results
 exportDataCoverageReport <- function(aso) {
   rootDir <- aso@methodParameters[['root_dir']]
-  fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
+  fileName = constructFileName(baseFileName = "Plate_Read_Data_Coverage",
+                               plateReadLabel = aso@plateSet@plateNames[2],
+                               fileExtension = "xlsx")
+
   tabs <- aso@plateSet@dataCoverageTables
-  openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
+  #openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
+  openxlsx::write.xlsx(tabs, file = fileName)
 }
 
 #' Makes sure that the reference plate read and the treatment plate read have the same parameters
@@ -440,10 +565,17 @@ transformData <- function(aso) {
   i = 1
   plateNames = c()
 
+  print("In transform data... number of plates")
+  print(length(aso@plateSet@plates))
+  print(length(names(aso@plateSet@plates)))
+  print(length(names(aso@plateSet@plates)))
+
   for(plateName in names(aso@plateSet@plates)) {
     plate <- aso@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
     if(i %% 2 == 0) {
+      print("running transform data for plateset ... should do this 1x for a single pair of plates")
+      print(plateNames)
       aso@plateSet <- dataTransform(aso@plateSet, platePair=plateNames, method = 'log2ratio', firstDataCol = 1)
       plateNames = c()
     }
@@ -477,8 +609,10 @@ exportPlateViews <- function(aso) {
     i = i + 1
   }
   rootDir <- aso@methodParameters[['root_dir']]
-  fileName = format(Sys.time(), "Plate_Data_Coverage_Status_Reports_%Y%m%d_%H%M")
-  fileName = paste0(rootDir,fileName,".pdf")
+  fileName = constructFileName(baseFileName = "Plate_Coverage_Heatmaps",
+                               plateReadLabel = aso@plateSet@plateNames[2],
+                               fileExtension = "pdf")
+
   pdf(fileName, height = length(ptoPlot)*2, width = 8.5)
   gridExtra::grid.arrange(plotgrid)
   dev.off()
@@ -500,8 +634,7 @@ exportBarCharts <- function(aso) {
   gridDim <- dim(plotgrid)
   rootDir <- aso@methodParameters[['root_dir']]
 
-  fileName = format(Sys.time(), "Sample_Bar_Charts_%Y%m%d_%H%M")
-  fileName = paste0(rootDir,fileName,".pdf")
+  fileName = constructFileName(baseFileName = "Response_Bar_Charts", plateReadLabel = aso@plateSet@plateNames[2], fileExtension = 'pdf')
 
   pdf(fileName, height = gridDim[1] * 2, width = gridDim[2] * 2)
   gridExtra::grid.arrange(plotgrid)
@@ -616,7 +749,6 @@ runPairedTTest <- function(aso) {
   df <- data.frame(matrix(ncol=9, nrow=0))
   for(resName in names(results)) {
     res <- results[[resName]]
-    #print(res)
     nameVals <- unlist(strsplit(resName,split="_"))
     sample <- nameVals[1]
     dose <- nameVals[2]
@@ -641,12 +773,12 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
   # The @ is used to dereference
   # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
   # it's designed as a list or dictionary
-  plateTransformedData <- aso@plateSet@transformedPlateData
+  plateTransformedData <- aso@plateSet@transformedPlateData[[1]]
 
   # an R list object is dereferenced using double brackets
   # you can refer to a member of the list by name or by index. *R indexing starts at 1
   if(dataType == 'transformed'){
-    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+    testData <- plateTransformedData
   } else {
     testData <- aso@plateSet@plates[[2]]@plateData
   }
@@ -663,17 +795,21 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
 
   # Created a data frame that does not contain empty wells
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+  splicedData <- splicedData[splicedData$Mask != 1,]
 
-  if(masking != ""){
-    splicedData = splicedData[splicedData$Well != masking,]
-  }
+#  if(masking != ""){
+#    splicedData = splicedData[splicedData$Well != masking,]
+#  }
+
+  posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
+  negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
 
   # Create a data frame that only contains positive controls
-  PosCtrl = splicedData[splicedData$WellType == "Positive Control",]
+  PosCtrl = splicedData[splicedData$WellType == posControlKey,]
   # unique(PosCtrl$WellType)
 
   # Create a data frame that only contains negative controls
-  NegCtrl = splicedData[splicedData$WellType == "Negative Control",]
+  NegCtrl = splicedData[splicedData$WellType == negControlKey,]
   # unique(NegCtrl$WellType)
 
   # make means and sds data frame for both controls
@@ -699,7 +835,10 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
 }
 
 
-zFactorXlsx <- function(aso, fileName = 'zPrimeResults.xlsx'){
+zFactorXlsx <- function(aso){
+
+  fileName = constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = aso@plateSet@plateNames[2], fileExtension = "xlsx")
+
   # Make a list
   zPrimeList <- list()
 
@@ -709,55 +848,70 @@ zFactorXlsx <- function(aso, fileName = 'zPrimeResults.xlsx'){
   # Second call to zFactor to calculate for raw data
   zPrimeList[['rawDataResults']] <- aso:::zFactor(aso, 'experimental')
 
+  fileName <- aso:::constructFileName(baseFileName = "zPrimeFactorResults", plateReadLabel = aso@plateSet@plateNames[2], fileExtension = "xlsx")
+
   # Write to an Excel file
   openxlsx::write.xlsx(zPrimeList,
-                       file = paste0(format(Sys.time(), 'zPrimeResults_%Y%m%d_%H%M'), '.xlsx'),
+                       file = fileName,
                        rowNames = TRUE)
-
-  return(zPrimeList)
 }
 
 
-runPca = function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T){
-  plateTransformedData = aso@plateSet@transformedPlateData
+runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T){
 
+  plateTransformedData = aso@plateSet@transformedPlateData
   plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
 
   if(dataType == 'transformed'){
-    testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+    testData <- plateTransformedData[[1]]
   } else if (dataType == "raw"){
     testData <- aso@plateSet@plates[[2]]@plateData
-  } else {
+  } else if (dataType == "controls") {
+
+    posControlKey <- asoObj@methodParameters$analysis_params$Positive_Control_Key
+    negControlKey <- asoObj@methodParameters$analysis_params$Negative_Control_Key
+    controlKeys <- c(posControlKey, negControlKey)
+
     testData = plateTransformedData[[1]]
-    testData = testData[plateMap$Compound %in% compoundIDList,]
-    plateMap = plateMap[plateMap$Compound %in% compoundIDList,]
+    testData = testData[plateMap$WellType %in% controlKeys,]
+    plateMap = plateMap[plateMap$WellType %in% controlKeys,]
+  } else {
+    return(NULL)
   }
 
   tableWithAnnotation <- cbind(plateMap, testData)
 
-  for(i in 1:nrow(tableWithAnnotation)){
-    if(tableWithAnnotation[i,"Compound"] == "M1_IDT"){
-      tableWithAnnotation[i,"Compound"] = "Positive Control"
-    }
-    if(tableWithAnnotation[i,"Compound"] == "Veh") {
-      tableWithAnnotation[i,"Compound"] = "Negative Control"
-    }
-  }
+  tableWithAnnotation$Compound[tableWithAnnotation$WellType == "Positive Control"] <- "Positive Control"
+  tableWithAnnotation$Compound[tableWithAnnotation$WellType == "Negative Control"] <- "Negative Control"
+
+  # for(i in 1:nrow(tableWithAnnotation)){
+  #   if(tableWithAnnotation[i,"Compound"] == "M1_IDT"){
+  #     tableWithAnnotation[i,"Compound"] = "Positive Control"
+  #   }
+  #   if(tableWithAnnotation[i,"Compound"] == "Veh") {
+  #     tableWithAnnotation[i,"Compound"] = "Negative Control"
+  #   }
+  # }
 
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+  splicedData <- na.omit(splicedData)
+  rownames(splicedData) <- splicedData$Well
 
   reducedPlateMap = splicedData[, 1:ncol(plateMap)]
 
   #create dataframe with test data that does not include plate map
-  testDataSplice = splicedData %>% dplyr:::select(ncol(plateMap):last_col())
+  testDataSplice = splicedData %>% dplyr:::select((ncol(plateMap)+1):last_col())
+  testDataSplice <- na.omit(testDataSplice)
+
   testDataSpliceVar = testDataSplice[ , which(apply(testDataSplice, 2, var) != 0)]
   #transpose
   testDataSpliceT = t(testDataSplice)
   #transposition caused columns with zero variance, remove those
   testDataSpliceTvar = testDataSpliceT[ , which(apply(testDataSpliceT, 2, var) != 0)]
 
-  pcaASO = prcomp(na.omit(testDataSpliceVar), center = TRUE, scale. = scale, retx = TRUE)
-  pcaASOT = prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = scale, retx = TRUE)
+  pcaASO = prcomp(na.omit(testDataSplice), center = TRUE, scale. = scale, retx = TRUE)
+  pcaASOT = prcomp(na.omit(testDataSpliceT), center = TRUE, scale. = scale, retx = TRUE)
 
   pcaList = list()
   pcaList[['Wells PCA']] = pcaASO
@@ -767,26 +921,40 @@ runPca = function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T)
   pcaList[['Annotations']] = reducedPlateMap
   pcaList[['Parameter Names']] = colnames(testData)
 
-
   return(pcaList)
-
 }
 
-plotPCA = function(pcaList, pcaType = 1, plotLoadings=F){
+
+plotPCA <- function(pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
+
+  plotTitle = ""
+
+  maxOverlap <- 10
+  if(dataName=="control_wells") {
+    maxOverlap = Inf
+  }
 
   if(pcaType == 1){
-    plotTitle = 'Wells PCA'
+    plotTitle = 'Wells_PCA'
 
     labels = pcaList[['Annotations']]$Compound
 
     pca_prop_var = (pcaList[[pcaType]]$sdev^2/sum(pcaList[[pcaType]]$sdev^2))
 
     if(!plotLoadings) {
-      pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-        geom_point(size = 3) +
-        labs(title = plotTitle) +
-        xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
-        ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+      #pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]])
+
+      pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=pcaList$Annotations, color='Compound', loadings=F, label=F)
+
+      if(dataName == "control_wells") {
+        pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label=pcaList$Annotations$Well), max.overlaps=maxOverlap)
+      }
+
+      # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+      #   geom_point(size = 3) +
+      #   labs(title = plotTitle) +
+      #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
+      #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
     } else {
 
       pcaProj <- pcaList[[pcaType]]$x
@@ -796,40 +964,45 @@ plotPCA = function(pcaList, pcaType = 1, plotLoadings=F){
       yL <- unlist(pcLoadings[,2])
       loadData <- data.frame(xL, yL)
 
-      pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-        geom_point(size = 3) +
-        labs(title = plotTitle) +
-        xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
-        ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+      # pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]])
 
-      pcaPlot2 <- pcaPlot + geom_point(data=loadData, aes(x=xL,y=yL, color="blue"))
+      pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=pcaList$Annotations, color='Compound', loadings=T, label=F)
+      if(dataName == "control_wells") {
+        pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label=pcaList$Annotations$Well), max.overlaps=maxOverlap)
+      }
 
-
+      # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+      #   geom_point(size = 3) +
+      #   labs(title = plotTitle) +
+      #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 2), "% of var.)")) +
+      #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 2), "% of var.)"))
+      #
+      # pcaPlot2 <- pcaPlot + geom_point(data=loadData, aes(x=xL,y=yL, color="blue"))
     }
 
   } else {
-    plotTitle = 'Parameters PCA'
+    plotTitle = 'Parameters_PCA'
 
-    labels = pcaList[['Parameter Names']]
+    labels = data.frame(pcaList[['Parameter Names']])
+    colnames(labels) <- 'param'
 
-    pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
-      geom_point(size = 3) + labs(title = plotTitle) +
-      xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 3), "% of var.)")) +
-      ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 3), "% of var.)"))
+    pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=labels, color='param', loadings=F, label=F) +
+      ggrepel::geom_text_repel(aes(label=labels$param), max.overlaps = maxOverlap)
 
-
-    pcaPlot = pcaPlot()
-
+    # pcaPlot = ggplot(data.frame(pcaList[[pcaType]]$x), aes(x=PC1, y=PC2, color = labels)) +
+    #   geom_point(size = 3) + labs(title = plotTitle) +
+    #   xlab(paste0("PC1 (", round(pca_prop_var[1]*100, digits = 3), "% of var.)")) +
+    #   ylab(paste0("PC2 (", round(pca_prop_var[2]*100, digits = 3), "% of var.)"))
   }
 
+  fileName = paste0(plotTitle,"_",dataName)
+  fileName <- aso:::constructFileName(baseFileName = fileName, plateReadLabel = aso@plateSet@plateNames[2], fileExtension = "pdf")
 
-
-  pdf(file = paste0(format(Sys.time(),'PCA_%Y%m%d_%H%M_%S'),'.pdf'))
+  pdf(file = fileName)
   print(pcaPlot)
   dev.off()
 
   return(pcaPlot)
-
 }
 
 #' generatees random forest predictions for ASOs
@@ -837,43 +1010,58 @@ plotPCA = function(pcaList, pcaType = 1, plotLoadings=F){
 #' @param masking list of wells to optionally mask
 #' @returns creates a prediction heatmap and dot plot, returns a Heatmap object.
 #' @export
-asoRandomForest = function(aso, masking = ''){
+asoRandomForest <- function(aso, masking = NULL){
+
+  plateName <- aso@plateSet@plateNames[2]
+
+  negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
+  posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
+
   #Subsetting data
   data_imputed<-aso@plateSet@transformedPlateData[[1]]
   sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
 
-  data_imputed <- data_imputed[which(sample_info$Compound!="Empty"),]
+  data_imputed <- data_imputed[which(sample_info$Compound != "Empty" & sample_info$Mask != 1),]
+
+  # filter empty wells and masked wells
   sample_info <- sample_info %>%
-    filter(Compound!="Empty")
+    filter(Compound!="Empty") %>%
+    filter(Mask!=1)
+
   data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
 
   #Build a data table that contains required data (can be updated)
-  pca_res <- prcomp(data_imputed, scale.=TRUE)
-  pca_df <- pca_res$x[,1:2] %>%
-    as.data.frame() %>%
-    mutate(WellType = sample_info$WellType) %>%
-    mutate(Compound = sample_info$Compound) %>%
-    mutate(Well = sample_info$Well) %>%
-    mutate(Concentration = as.character(sample_info$Concentration))
-
-  if(masking != ''){
-    pca_df = pca_df[pca_df$Well != masking,]
-  }
+  # pca_res <- prcomp(data_imputed, scale.=TRUE)
+  # pca_df <- pca_res$x[,1:2] %>%
+  #   as.data.frame() %>%
+  #   mutate(WellType = sample_info$WellType) %>%
+  #   mutate(Compound = sample_info$Compound) %>%
+  #   mutate(Well = sample_info$Well) %>%
+  #   mutate(Concentration = as.character(sample_info$Concentration))
+  #
+  #
+  # if(masking != ''){
+  #   pca_df = pca_df[pca_df$Well != masking,]
+  # }
 
   #Subset data to get all required training data
-  data_labels <- pca_df$WellType
-  training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+  #data_labels <- pca_df$WellType
+  data_labels <- sample_info$WellType
+  training_rows <- which(data_labels == posControlKey | data_labels == negControlKey)
   training_labels <- factor(data_labels[training_rows])
   training_data <- data_imputed[training_rows,] %>% as.data.frame
   training_data$label <-training_labels
-  concentration_labels <- as.numeric(pca_df$Concentration[training_rows])
-  new_training_data = cbind(concentration_labels, training_data)
+  concentration_labels <- as.numeric(sample_info$Concentration[training_rows])
+
+  #Drop concentration labels
+  #new_training_data = cbind(concentration_labels, training_data)
+  new_training_data <- training_data
 
   #Generate new labels that are numeric (between 0 and 1)
   cont_training_data = new_training_data
   updated_labels = data.frame()
-  for(i in 1:length(cont_training_data$concentration_labels)){
-    if(cont_training_data$label[i] == "Positive Control"){
+  for(i in 1:nrow(cont_training_data)){
+    if(cont_training_data$label[i] == posControlKey){
       updated_labels[i,1] = as.numeric(1)
     } else {
       updated_labels[i,1] = as.numeric(0)
@@ -892,15 +1080,18 @@ asoRandomForest = function(aso, masking = ''){
                      trControl = caret::trainControl(method = "cv",number=10))
 
   #Subset data for testing
-  testing_rows = which(data_labels == 'Test' & pca_df$Compound != 'PBS')
+  testing_rows = which(data_labels == 'Test' & sample_info$Compound != 'PBS')
   testing_data <-  data_imputed[testing_rows,] %>% as.data.frame
-  clean_conc_labels = as.numeric(pca_df$Concentration[testing_rows])
-  new_testing_data = cbind(clean_conc_labels, testing_data)
-  colnames(new_testing_data)[1] = "concentration_labels"
+  clean_conc_labels = as.numeric(sample_info$Concentration[testing_rows])
+
+  # don't include concentration as a factor
+  # new_testing_data = cbind(clean_conc_labels, testing_data)
+  #colnames(new_testing_data)[1] = "concentration_labels"
+  new_testing_data <- testing_data
 
   #Running the random forest
   new_test_labels <- stats::predict(new_model, newdata = new_testing_data)
-  new_predictions <- data.frame(aso=pca_df$Compound[testing_rows],Concentration = pca_df$Concentration[testing_rows],
+  new_predictions <- data.frame(aso=sample_info$Compound[testing_rows],Concentration = sample_info$Concentration[testing_rows],
                                 class=new_test_labels)
 
   #Generating new data frames with numerical data
@@ -911,7 +1102,7 @@ asoRandomForest = function(aso, masking = ''){
 
   for(i in compound_list){
     #create concentration list for each compound
-    conc_list = unique(new_predictions[new_predictions$aso == i, 'Concentration'])
+    conc_list = as.numeric(unique(new_predictions[new_predictions$aso == i, 'Concentration']))
 
     for(j in conc_list){
       #create class list for each concentration of each compound
@@ -923,8 +1114,8 @@ asoRandomForest = function(aso, masking = ''){
       mean_class = mean(class_df$.)
       sd_class = sd(class_df$.)
 
-      prediction_mean[i,j] = mean_class
-      prediction_sd[i,j] = sd_class
+      prediction_mean[i,as.character(j)] = mean_class
+      prediction_sd[i,as.character(j)] = sd_class
 
     }
   }
@@ -934,8 +1125,10 @@ asoRandomForest = function(aso, masking = ''){
                          column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
                          row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
                          column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
-  pred_heatmap
-  pdf("ASOHeatmap.pdf")
+
+  fileName <- aso:::constructFileName(baseFileName = 'ASO_Tox_Heatmap', plateReadLabel = plateName, fileExtension=".pdf")
+
+  pdf(fileName)
   print(pred_heatmap)
   dev.off()
 
@@ -957,31 +1150,65 @@ asoRandomForest = function(aso, masking = ''){
   }
 
   aso_plot_list = list()
-  for(i in 1:length(unique(new_predictions$aso))){
 
-    concDotPlot = ggplot(data = new_predictions[new_predictions$aso == paste0('ASO', i),],
+  # concentration needs to be a character vector or factor
+  new_predictions$Concentration <- as.factor(new_predictions$Concentration)
+
+  uniqueASONames = unique(new_predictions$aso)
+
+
+
+  for(i in 1:length(uniqueASONames)){
+
+      asoName = uniqueASONames[i]
+
+      print(paste0("Dot plot for ASO: ",asoName))
+
+      concDotPlot = ggplot(data = new_predictions[new_predictions$aso == asoName,],
                          aes(x = Concentration, y = class)) +
       geom_dotplot(binaxis = 'y', stackdir = 'center') +
       stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
                    geom="errorbar", color="red", width=0.2) +
-      ggtitle(paste0('ASO', i)) + aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
+      ggtitle(asoName) + # aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
       coord_cartesian(ylim=c(-0.1, 1.1)) + scale_y_continuous(breaks=seq(0, 1, 0.25)) +
       geom_point(size=2) + ylab('Prediction')
 
-    aso_plot_list[[i]] = concDotPlot
+      # concDotPlot
 
+    aso_plot_list[[i]] = concDotPlot
   }
 
-  pdf("ASOConcPlots.pdf")
-  do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
-  do.call(gridExtra::grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
+  print("STOP")
+
+  fileName <- aso:::constructFileName(baseFileName = 'ASO_Tox_DotPlot', plateReadLabel = plateName, fileExtension=".pdf")
+
+  nrows <- floor(length(aso_plot_list)/2) + length(aso_plot_list) %% 2
+  pages <- floor(nrows/3) + nrows %% 3
+
+  pdf(fileName)
+  lastToPlot <- 0
+  for(page in 0:(pages-1)) {
+    firstToPlot <- lastToPlot + 1
+    lastToPlot <- firstToPlot + 5
+    print(paste0(firstToPlot, " : ", lastToPlot))
+    if(lastToPlot > length(aso_plot_list)) {
+      lastToPlot <- length(aso_plot_list)
+    }
+    do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2))
+  }
+
+  #do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
+  #do.call(gridExtra::grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
   dev.off()
 
   #Exporting data table with all numeric values for the heatmap and dotplots
   pred_plot_df = cbind(pred_plot_mean, pred_plot_sd)
 
+
+  fileName <- aso:::constructFileName(baseFileName = 'RandomForest_Predictions', plateReadLabel = plateName, fileExtension=".xlsx")
+
   openxlsx::write.xlsx(pred_plot_df,
-                       file = paste0(format(Sys.time(),'RandomForestPredictions_%Y%m%d_%H%M'), '.xlsx'),
+                       file = fileName,
                        rowNames = TRUE)
 
   return(pred_heatmap)

@@ -1,3 +1,28 @@
+#' Starts a log file.
+initializeLog <- function(logLevel="INFO") {
+  logger::log_level(logLevel)
+  logFileName <- paste0(getwd(),"/ASO_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
+  logger::log_appender(logger::appender_file(logFileName))
+  logger::log_info("ASO Analysis Started -- Log Initialized")
+}
+
+idleLog <- function() {
+  logger::log_level(logger::ERROR)
+  logFileName <- paste0(getwd(), "/idle_log.log")
+  logger::log_appender(logger::appender_tee(logFileName))
+}
+
+constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension, appendTimeStamp=T) {
+  fileName = baseFileName
+  if(nchar(plateReadLabel) > 0) {
+    fileName <- paste0(fileName, "_", plateReadLabel)
+  }
+  if(appendTimeStamp) {
+    fileName <- paste0(fileName, "_", format(Sys.time(), "%Y%m%d_%H%M"))
+  }
+  fileName <- paste0(fileName, ".", fileExtension)
+  return(fileName)
+}
 
 #' Add a plate to a plateset
 #'
@@ -12,6 +37,26 @@ addPlate <- function(plateset, plate, label) {
   plateset@plateIdList <- c(plateset@plateIdList, plate@plateId)
   return(plateset)
 }
+
+#' @title subsetPlateSet
+#' @description
+#'    Reduce platesSet object to the specified plate indices. This utility method is intended to be run prior to generation of transformed data and QC.
+#'
+#' @param plateSet The plateset to subset
+#' @param plateIndicesToKeep The indices with in the plate collection to keep in the new PlateSet object
+#'
+#' @export
+subsetPlateSet <- function(plateSet, plateIndicesToKeep) {
+
+  plateSet@plateIdList <- plateSet@plateIdList[plateIndicesToKeep]
+  plateSet@plates <- plateSet@plates[plateIndicesToKeep]
+  plateSet@plateNames <- plateSet@plateNames[plateIndicesToKeep]
+
+  print(length(plateSet@plates))
+
+  return(plateSet)
+}
+
 
 #' filterLowDataParameters
 #'
@@ -198,11 +243,8 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
     lowerColorLim <- quantile(zMat, probs=(0.05), na.rm=T)
     upperColorLim <- quantile(zMat, probs=(0.95), na.rm=T)
-    print("row number just before cond format")
-    print(rowNum)
-    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
-    # '#4491fc'
+    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
     rowNum = rowNum + nrow(zMat) + rowSpacing
   }
@@ -226,10 +268,13 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   openxlsx::writeData(wb=wb, sheet=3, paste0("Plate Input File: ",plateFile), startRow=1, colNames=F, rowNames=F)
   openxlsx::writeData(wb=wb, sheet=3, cvs, startRow=2, colNames=T, rowNames = T)
 
-  fileName = format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(rootExportDirectory, "/", fileName)
+  fileName <- format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
 
-  openxlsx::saveWorkbook(wb,file=fileName,overwrite = T)
+  fileName <- constructFileName(baseFileName = 'Reference_Plate_QC', fileExtension = 'xlsx')
+
+  # fileName <- paste0(rootExportDirectory, "/", fileName)
+
+  openxlsx::saveWorkbook(wb,file=fileName, overwrite = T)
 }
 
 
@@ -345,14 +390,6 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #' @export
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
-
-  #print(parameter)
-
-  print(colnames(plate@plateData))
-  print(parameter)
-  print(textValues)
-  print(numericValues)
-
   vals <- plate@plateData[,parameter]
 
   for(val in textValues) {
@@ -377,13 +414,9 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
-      print("initial common params")
-      print(commonParams)
       commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
-      print("other params")
-      print(params)
       paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
       commonParamNames <- intersect(commonParamNames, paramNames)
@@ -418,13 +451,9 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
-      print("hey in data transform")
-
       # plateData may include wellIds in first column, so for numeric transformation, we need to skip first column using firstDataCol
       refData <- refPlate@plateData[,firstDataCol:ncol(refPlate@plateData)]
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
-
-      print("Have ref and expt data")
 
       suppressWarnings(
       refData <- sapply(refData, 'as.numeric')
@@ -684,7 +713,6 @@ aucParameterPatch <- function(aso) {
     i=1
     plate <- aso@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
-      #print(n)
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
         plate@parameters[i] <- "Area Under Curve (RFUs)"
@@ -780,7 +808,6 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
     openxlsx::mergeCells(wb, sheet=1, cols = prevStart:(prevStart+concCount-1), rows = 1)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 1, cols = prevStart)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 2, cols = prevStart:(prevStart+concCount-1))
-    #print(paste0(prevStart," to ",(prevStart + concCount)))
     startCol = startCol + concCount
   }
 
@@ -797,7 +824,9 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
                                   type = "expression", rule=">0.1", style = emptyStyle)
 
   fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", fileName)
+
+  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = aso@plateSet@plateNames[2],
+                               fileExtension = "xlsx")
 
   # lets add the unpivoted table
   openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
@@ -818,10 +847,13 @@ exportTransformedData <- function(aso) {
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- paste0("Transformed_Plate_Data_",format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx")
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
+                                fileExtension = "xlsx")
+
+  print("exporting transformed data")
+  print(fileName)
 
   openxlsx::write.xlsx(dataList, file=fileName)
-
 }
 
 

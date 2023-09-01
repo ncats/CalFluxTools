@@ -4,7 +4,7 @@
 \alias{asoRandomForest}
 \title{generatees random forest predictions for ASOs}
 \usage{
-asoRandomForest(aso, masking = "")
+asoRandomForest(aso, masking = NULL)
 }
 \arguments{
 \item{aso}{an aso object containing transformed data that's ready for analysis}

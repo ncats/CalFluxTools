@@ -18,6 +18,7 @@ setClass("plate", slots=list(
 )
 )
 
+
 # corrPlateData = "data.frame",
 # correctionProcesses = "vector",
 
@@ -38,7 +39,8 @@ setClass("plateset", slots=list(
 setClass("aso", slots=list(
   plateSet = 'plateset',
   parameterInfo = "data.frame",
-  methodParameters = "list"
+  methodParameters = "list",
+  outputDirs = "vector"
 ))
 
 
