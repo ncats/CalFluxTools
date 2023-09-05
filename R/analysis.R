@@ -46,20 +46,23 @@ processAsoData <- function(asoParameterXlsxFilePath) {
   # the aso has all plate pairs specified
   # loop through all plate pairs in the plate set.
   numberOfPlates <- length(aso@plateSet@plates)
-
   logger::log_info(paste0("Number of plate pairs to process: ",numberOfPlates/2))
+
+  logger::log_info("Initialize export directory...")
+  outDir <- aso:::initializedExportLocation(aso)
+  logger::log_success(paste0("Initialized export directory... ", outDir))
 
   platePairIndex = 1
   for(i in 1:numberOfPlates) {
     if(i %% 2 == 1) {
 
       # set the ouput dir
-      outDir <- paste0(rootDir, aso@outputDirs[[i]])
-      if(!dir.exists(outDir)) {
-        dir.create(outDir)
+      currentOutDir <- paste0(outDir, "/" ,aso@outputDirs[[i]])
+      if(!dir.exists(currentOutDir)) {
+        dir.create(currentOutDir)
       }
 
-      setwd(outDir)
+      setwd(currentOutDir)
 
       logger::log_info("")
       logger::log_info("###############")
@@ -117,6 +120,11 @@ processAsoData <- function(asoParameterXlsxFilePath) {
       platePairIndex <- platePairIndex + 1
     }
   }
+
+  setwd("..")
+
+  aso:::exportRandomForestResults(aso)
+  aso:::exportRfPredictionHeatmaps(aso)
 
   setwd(origDir)
 
@@ -1242,7 +1250,7 @@ asoRandomForest <- function(aso, masking = NULL){
 }
 
 
-evaluateControlWellPCA(aso) {
+evaluateControlWellPCA <- function(aso) {
   pcaRes <- aso@pcaResults
   posCtrlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
   negCtrlKey <- aso@methodParameters$analysis_params$Negative_Control_Key

@@ -136,6 +136,8 @@ readAsoParameterFile <- function(filename) {
 
 
 parseAnalysisSettings <- function(analysisDf) {
+
+  analysisName = ""
   rootDir = ""
   #create output directory
 
@@ -171,10 +173,13 @@ parseAnalysisSettings <- function(analysisDf) {
       analysisParams <- parseProcessingParams(analysisDf[(i+1):nrow(analysisDf),1:2])
     } else if(analysisDf[i,1] == "Plate_Format") {
       plateFormat <- as.numeric(trimws(analysisDf[i,2]))
+    } else if(analysisDf[i,1] == "Analysis_Name") {
+      analysisName = trimws(analysisDf[i,2])
     }
   }
 
   allParamsList <- list()
+  allParamsList[['analysis_name']] <- analysisName
   allParamsList[['root_dir']] <- rootDir
   #Add an output directory in this list as well, can use that output directory in any file creation
   allParamsList[['plate_format']] <- plateFormat

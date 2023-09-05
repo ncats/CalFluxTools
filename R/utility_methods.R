@@ -12,7 +12,17 @@ idleLog <- function() {
   logger::log_appender(logger::appender_tee(logFileName))
 }
 
-constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension, appendTimeStamp=T) {
+initializedExportLocation <- function(aso) {
+  outDir <- constructFileName(baseFileName = paste0(aso@methodParameters$analysis_name, "_ASO_Analysis"))
+  path <- paste0(getwd(), "/", outDir)
+  if(!dir.exists(path)) {
+    dir.create(path)
+  }
+  setwd(path)
+  return(path)
+}
+
+constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension = "", appendTimeStamp=T) {
   fileName = baseFileName
   if(nchar(plateReadLabel) > 0) {
     fileName <- paste0(fileName, "_", plateReadLabel)
@@ -854,4 +864,111 @@ exportTransformedData <- function(aso) {
 }
 
 
+exportRandomForestResults <- function(aso) {
+
+  fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
+                                fileExtension = "xlsx")
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  for(resName in names(aso@rfResults)) {
+
+    res <- aso@rfResults[[resName]]@prediction_means
+
+    print(colnames(res))
+    resName <- paste0(resName, "_pred_means")
+    predResults[[resName]] <- res
+
+    if(iter == 1) {
+      bmd <- getBenchmarkDose(res)
+      rownames(bmd) <- rownames(res)
+    } else {
+      bmd <- cbind(bmd, getBenchmarkDose(res))
+    }
+
+    iter = iter + 1
+  }
+
+  colnames(bmd) <- names(aso@rfResults)
+  bmdList <- list(bench_mark_dose=bmd)
+  predResults <- append(bmdList, predResults)
+
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@prediction_sds
+    resName <- paste0(resName, "_pred_sds")
+    predResults[[resName]] <- res
+  }
+
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@predictions
+    resName <- paste0(resName, "_pred_full")
+    predResults[[resName]] <- res
+  }
+
+  openxlsx::write.xlsx(predResults, file=fileName, rowNames=T)
+}
+
+
+getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
+  colNames <- colnames(predictionMeans)
+
+  bmdDf <- data.frame(matrix(nrow=nrow(predictionMeans), ncol=1))
+
+  for(row in 1:nrow(predictionMeans)) {
+    for(col in 1:ncol(predictionMeans)) {
+      if(!is.na(predictionMeans[row,col]) && predictionMeans[row,col] >= predCutoff) {
+        bmdDf[row, 1] <- colNames[col]
+        break
+      }
+      # fall through
+      bmdDf[row, 1] <- NA
+    }
+  }
+
+  return(bmdDf)
+}
+
+
+exportRfPredictionHeatmaps <- function(aso) {
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  rfRes = NULL
+  timeLabels = c()
+  levels = c()
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@prediction_means
+    if(iter == 1) {
+      rfRes = res
+    } else {
+      rfRes = cbind(rfRes, res)
+    }
+
+    timeLabels = c(timeLabels, rep(resName, ncol(res)))
+    levels = c(levels, resName)
+    iter = iter + 1
+  }
+
+  timeLabels <- factor(timeLabels, levels=levels)
+
+  # rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+  #                          column_title_side = "top", column_names_side="top", name = 'Prediction',
+  #                         row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+
+  fileName <- aso:::constructFileName(paste0(aso@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
+                          fileExtension = "pdf")
+
+#  pdf(file=fileName, paper='usr', width=14, height=8)
+  pdf(file=fileName, width=13, height=6)
+  ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+                          column_title_side = "top", column_names_side="top", name = 'Prediction',
+                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+
+  dev.off()
+
+}
 
