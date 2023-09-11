@@ -1,5 +1,3 @@
-
-
 #' missingPlateDataChart
 #'
 #' @param plate plate object containing data to evaluate

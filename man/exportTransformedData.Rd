@@ -2,7 +2,8 @@
 % Please edit documentation in R/utility_methods.R
 \name{exportTransformedData}
 \alias{exportTransformedData}
-\title{A utility method to export transformed data. The transformed data represents change between the ASO treated state and teh control/untreated state.}
+\title{A utility method to export transformed data. The transformed data represents
+change between the ASO treated state and teh control/untreated state.}
 \usage{
 exportTransformedData(aso)
 }
@@ -10,5 +11,6 @@ exportTransformedData(aso)
 \item{aso}{an aso object from which to export transformed data.}
 }
 \description{
-A utility method to export transformed data. The transformed data represents change between the ASO treated state and teh control/untreated state.
+A utility method to export transformed data. The transformed data represents
+change between the ASO treated state and teh control/untreated state.
 }

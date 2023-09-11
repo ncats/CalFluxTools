@@ -67,7 +67,7 @@ processAsoData <- function(asoParameterXlsxFilePath) {
       logger::log_info("")
       logger::log_info("###############")
       logger::log_info(paste0("Processing plate pair: ",platePairIndex))
-      logger::log_info(paste0("Output directory: ", outDir))
+      logger::log_info(paste0("Output directory: ", currentOutDir))
 
       newASO <- aso
       # assign(x="newASO", value=aso)
@@ -812,7 +812,12 @@ runPairedTTest <- function(aso) {
   return(df)
 }
 
-zFactor <- function(aso, dataType = 'transformed', masking = ""){
+#' Utility analysis method to generate z-prime factor data.
+#' @param aso aso object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
+#' @param dataType Either transformed or raw data.
+#' @returns a z-prime factor result table with positive and negative control means, SDs, CVs and the z-prime factors for each parameter.
+#' @export
+zFactor <- function(aso, dataType = 'transformed'){
   # The @ is used to dereference
   # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
   # it's designed as a list or dictionary
@@ -839,10 +844,6 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
   # Created a data frame that does not contain empty wells
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
   splicedData <- splicedData[splicedData$Mask != 1,]
-
-#  if(masking != ""){
-#    splicedData = splicedData[splicedData$Well != masking,]
-#  }
 
   posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
   negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
@@ -878,6 +879,10 @@ zFactor <- function(aso, dataType = 'transformed', masking = ""){
 }
 
 
+#' Runs a z-prime factor analysis on transformed and raw data results. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
+#' Exports a file containing z-prime factor, mean, SD and CV of each parameter using both transformed and raw data.
+#' @param aso an aso object containing transformed data on which to report z-prime on.
+#' @export
 zFactorXlsx <- function(aso){
 
   fileName = constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = aso@plateSet@plateNames[2], fileExtension = "xlsx")
@@ -900,6 +905,15 @@ zFactorXlsx <- function(aso){
 }
 
 
+#' Runs a PCA on aso data
+#' @param aso aso object containing data
+#' @param dataType c("transformed', 'raw', 'controls') to indicate if the data should be all transformed well data, all raw well data,
+#' or well data only from control wells.
+#' @param compoundList an optional vector of compounds ids to use for PCA
+#' @param scale should the PCA be scaled. Default is TRUE.
+#' @returns a list object containing 4 fields. 'Wells PCA' and 'Parameters PCA' contain the prcomp objects for running PCA on wells or parameters.
+#' The Annotations element is a data frame containing well annotations. The 'Parameter Names' element is a data frame containing parameter info.
+#' @export
 runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T){
 
   plateTransformedData = aso@plateSet@transformedPlateData
@@ -926,15 +940,6 @@ runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T
 
   tableWithAnnotation$Compound[tableWithAnnotation$WellType == "Positive Control"] <- "Positive Control"
   tableWithAnnotation$Compound[tableWithAnnotation$WellType == "Negative Control"] <- "Negative Control"
-
-  # for(i in 1:nrow(tableWithAnnotation)){
-  #   if(tableWithAnnotation[i,"Compound"] == "M1_IDT"){
-  #     tableWithAnnotation[i,"Compound"] = "Positive Control"
-  #   }
-  #   if(tableWithAnnotation[i,"Compound"] == "Veh") {
-  #     tableWithAnnotation[i,"Compound"] = "Negative Control"
-  #   }
-  # }
 
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
@@ -971,6 +976,12 @@ runPCA <- function(aso, dataType = 'transformed', compoundIDList = NULL, scale=T
 #'
 #' @import ggfortify
 #' @import ggplot2
+#' @param aso The aso object containing pcaResults
+#' @param pcaList A list object containing PCA results
+#' @param pcaType 1 = wells pca, 2 = parameters pca
+#' @param plotLoadings a boolean value determining if PCA loadings should be plotted.
+#' @param dataName an optional string to tag on the data results.
+#' @export
 plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
 
   plotTitle = ""
@@ -988,7 +999,6 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings=F, dataName = ""){
     pca_prop_var = (pcaList[[pcaType]]$sdev^2/sum(pcaList[[pcaType]]$sdev^2))
 
     if(!plotLoadings) {
-      #pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]])
 
       pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data=pcaList$Annotations, color='Compound', loadings=F, label=F)
 
@@ -1104,13 +1114,12 @@ asoRandomForest <- function(aso, masking = NULL){
 
   #Train model
   new_model <- caret::train(label ~ .,
-                     data =  cont_training_data,
-                     method = "rf",
-                     trControl = caret::trainControl(method = "cv",number=10))
+                            data =  cont_training_data,
+                            method = "rf",
+                            trControl = caret::trainControl(method = "cv",number=10))
 
   # capture model
   rf@model <- new_model
-
 
   #Subset data for testing
   testing_rows = which(data_labels == 'Test' & sample_info$Compound != 'PBS')
@@ -1162,9 +1171,9 @@ asoRandomForest <- function(aso, masking = NULL){
 
   #Generating Heatmap, exported as pdf
   pred_heatmap = ComplexHeatmap::Heatmap(as.matrix(prediction_mean), rect_gp = grid::gpar(col = "white", lwd = 2),
-                         column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
-                         row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
-                         column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
+                                         column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
+                                         row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
+                                         column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
 
   fileName <- aso:::constructFileName(baseFileName = 'ASO_Tox_Heatmap', plateReadLabel = plateName, fileExtension=".pdf")
 
@@ -1229,12 +1238,8 @@ asoRandomForest <- function(aso, masking = NULL){
     }
     suppressMessages( do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow=3, ncol=2)) )
   }
-
-  #do.call(gridExtra::grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
-  #do.call(gridExtra::grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
   dev.off()
 
-  #Exporting data table with all numeric values for the heatmap and dotplots
   pred_plot_df = cbind(pred_plot_mean, pred_plot_sd)
 
 
@@ -1275,9 +1280,6 @@ evaluateControlWellPCA <- function(aso) {
     print(zScorePos)
     print(length(zScoreNeg))
     print(zScoreNeg)
-
-
-    # rework to just check pos to mean(pos) vs pos to mean(neg) and vice versa
   }
 
 }

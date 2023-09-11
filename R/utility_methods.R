@@ -3,6 +3,7 @@ initializeLog <- function(logLevel="INFO") {
   logger::log_level(logLevel)
   logFileName <- paste0(getwd(),"/ASO_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
   logger::log_appender(logger::appender_file(logFileName))
+
   logger::log_info("ASO Analysis Started -- Log Initialized")
 }
 
@@ -22,7 +23,7 @@ initializedExportLocation <- function(aso) {
   return(path)
 }
 
-constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension = "", appendTimeStamp=T) {
+constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension = "", appendTimeStamp=T, appendSubdir=NULL) {
   fileName = baseFileName
   if(nchar(plateReadLabel) > 0) {
     fileName <- paste0(fileName, "_", plateReadLabel)
@@ -31,6 +32,7 @@ constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension =
     fileName <- paste0(fileName, "_", format(Sys.time(), "%Y%m%d_%H%M"))
   }
   fileName <- paste0(fileName, ".", fileExtension)
+
   return(fileName)
 }
 
@@ -845,8 +847,10 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
 }
 
 
-#' A utility method to export transformed data. The transformed data represents change between the ASO treated state and teh control/untreated state.
+#' A utility method to export transformed data. The transformed data represents
+#' change between the ASO treated state and teh control/untreated state.
 #' @param aso an aso object from which to export transformed data.
+#' @export
 exportTransformedData <- function(aso) {
   data <- data.frame(aso@plateSet@transformedPlateData[[1]])
 
@@ -864,6 +868,9 @@ exportTransformedData <- function(aso) {
 }
 
 
+#' Exports a colelction of random forest results into one file, along with Benchmark Dose.
+#' @param aso The aso object containing the RandomForest Results
+#' @export
 exportRandomForestResults <- function(aso) {
 
   fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
@@ -931,6 +938,9 @@ getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
 }
 
 
+#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes rfResults slot.
+#' @param aso The aso object containing Random Forest result.
+#' @export
 exportRfPredictionHeatmaps <- function(aso) {
 
   predResults = list()
@@ -955,18 +965,15 @@ exportRfPredictionHeatmaps <- function(aso) {
 
   timeLabels <- factor(timeLabels, levels=levels)
 
-  # rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
-  #                          column_title_side = "top", column_names_side="top", name = 'Prediction',
-  #                         row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+  rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+                           column_title_side = "top", column_names_side="top", name = 'Prediction',
+                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
 
   fileName <- aso:::constructFileName(paste0(aso@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
                           fileExtension = "pdf")
 
-#  pdf(file=fileName, paper='usr', width=14, height=8)
   pdf(file=fileName, width=13, height=6)
-  ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
-                          column_title_side = "top", column_names_side="top", name = 'Prediction',
-                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+  print(rfhm)
 
   dev.off()
 
