@@ -4,7 +4,7 @@
 ##' @author Andrew Patt
 ##' @export
 read_stemonix_data <- function(filename){
-  raw_data <- readr::read_file(filename, locale = locale(encoding = "ISO-8859-1"))
+  raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
   raw_data <- strsplit(raw_data,split='\t')[[1]]
   raw_data <- sapply(raw_data,function(x){
     if(identical(x,"")){
@@ -24,7 +24,6 @@ read_stemonix_data <- function(filename){
 
   # Extract plate name from file name in header
   plate_id = header[1]
-  print(plate_id)
   plate_id = unlist(strsplit(plate_id,"\\",fixed=TRUE))
   plate_id = plate_id[length(plate_id)]
   plate_id = gsub(".fmd","",plate_id,fixed=TRUE)
@@ -64,11 +63,9 @@ parse_individual_plate <- function(plate){
 
   plate_rows <- list()
   temp_row <- c()
-  print("Checking Plate")
-  print(plate)
+
   # Using blank entries to demarcate row beginnings
   for(i in plate){
-    print(i)
     if(i!=""){
       temp_row <-c(temp_row,i)
     }else{
@@ -130,13 +127,7 @@ read_stemonix_metadata <- function(filename, plate){
 #' @export
 readAsoParameterFile <- function(filename) {
   paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
-
- #print(dim(paramsDf))
-
   analysisDf <- openxlsx::read.xlsx(filename, sheet="Analysis_Settings", colNames = F)
-
-  #print(dim(analysisDf))
-
   aso <- parseAnalysisSettings(analysisDf)
   aso@parameterInfo = paramsDf
 
@@ -145,6 +136,8 @@ readAsoParameterFile <- function(filename) {
 
 
 parseAnalysisSettings <- function(analysisDf) {
+
+  analysisName = ""
   rootDir = ""
   #create output directory
 
@@ -152,6 +145,8 @@ parseAnalysisSettings <- function(analysisDf) {
   plateFiles <- list()
   plateMaps <- list()
   analysisParams <- list()
+
+  aso = new("aso")
 
   for(i in 1:nrow(analysisDf)) {
     if(analysisDf[i,1] == "Root_Directory") {
@@ -171,23 +166,26 @@ parseAnalysisSettings <- function(analysisDf) {
         } else {
           plateFiles[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,2])
           plateMaps[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,3])
+          aso@outputDirs <- c(aso@outputDirs, trimws(analysisDf[j,5]))
         }
       }
     } else if(analysisDf[i,1] == "Processing") {
       analysisParams <- parseProcessingParams(analysisDf[(i+1):nrow(analysisDf),1:2])
     } else if(analysisDf[i,1] == "Plate_Format") {
       plateFormat <- as.numeric(trimws(analysisDf[i,2]))
+    } else if(analysisDf[i,1] == "Analysis_Name") {
+      analysisName = trimws(analysisDf[i,2])
     }
   }
 
   allParamsList <- list()
+  allParamsList[['analysis_name']] <- analysisName
   allParamsList[['root_dir']] <- rootDir
   #Add an output directory in this list as well, can use that output directory in any file creation
   allParamsList[['plate_format']] <- plateFormat
   allParamsList[['plate_file_list']] <- plateFiles
   allParamsList[['plate_map_list']] <- plateMaps
   allParamsList[['analysis_params']] <- analysisParams
-  aso = new("aso")
   aso@methodParameters = allParamsList
   return(aso)
 }

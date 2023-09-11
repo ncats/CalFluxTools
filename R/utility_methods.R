@@ -1,3 +1,40 @@
+#' Starts a log file.
+initializeLog <- function(logLevel="INFO") {
+  logger::log_level(logLevel)
+  logFileName <- paste0(getwd(),"/ASO_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
+  logger::log_appender(logger::appender_file(logFileName))
+
+  logger::log_info("ASO Analysis Started -- Log Initialized")
+}
+
+idleLog <- function() {
+  logger::log_level(logger::ERROR)
+  logFileName <- paste0(getwd(), "/idle_log.log")
+  logger::log_appender(logger::appender_tee(logFileName))
+}
+
+initializedExportLocation <- function(aso) {
+  outDir <- constructFileName(baseFileName = paste0(aso@methodParameters$analysis_name, "_ASO_Analysis"))
+  path <- paste0(getwd(), "/", outDir)
+  if(!dir.exists(path)) {
+    dir.create(path)
+  }
+  setwd(path)
+  return(path)
+}
+
+constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension = "", appendTimeStamp=T, appendSubdir=NULL) {
+  fileName = baseFileName
+  if(nchar(plateReadLabel) > 0) {
+    fileName <- paste0(fileName, "_", plateReadLabel)
+  }
+  if(appendTimeStamp) {
+    fileName <- paste0(fileName, "_", format(Sys.time(), "%Y%m%d_%H%M"))
+  }
+  fileName <- paste0(fileName, ".", fileExtension)
+
+  return(fileName)
+}
 
 #' Add a plate to a plateset
 #'
@@ -12,6 +49,26 @@ addPlate <- function(plateset, plate, label) {
   plateset@plateIdList <- c(plateset@plateIdList, plate@plateId)
   return(plateset)
 }
+
+#' @title subsetPlateSet
+#' @description
+#'    Reduce platesSet object to the specified plate indices. This utility method is intended to be run prior to generation of transformed data and QC.
+#'
+#' @param plateSet The plateset to subset
+#' @param plateIndicesToKeep The indices with in the plate collection to keep in the new PlateSet object
+#'
+#' @export
+subsetPlateSet <- function(plateSet, plateIndicesToKeep) {
+
+  plateSet@plateIdList <- plateSet@plateIdList[plateIndicesToKeep]
+  plateSet@plates <- plateSet@plates[plateIndicesToKeep]
+  plateSet@plateNames <- plateSet@plateNames[plateIndicesToKeep]
+
+  print(length(plateSet@plates))
+
+  return(plateSet)
+}
+
 
 #' filterLowDataParameters
 #'
@@ -198,11 +255,8 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
     lowerColorLim <- quantile(zMat, probs=(0.05), na.rm=T)
     upperColorLim <- quantile(zMat, probs=(0.95), na.rm=T)
-    print("row number just before cond format")
-    print(rowNum)
-    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
-    # '#4491fc'
+    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
     rowNum = rowNum + nrow(zMat) + rowSpacing
   }
@@ -226,16 +280,20 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   openxlsx::writeData(wb=wb, sheet=3, paste0("Plate Input File: ",plateFile), startRow=1, colNames=F, rowNames=F)
   openxlsx::writeData(wb=wb, sheet=3, cvs, startRow=2, colNames=T, rowNames = T)
 
-  fileName = format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(rootExportDirectory, "/", fileName)
+  fileName <- format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
 
-  openxlsx::saveWorkbook(wb,file=fileName,overwrite = T)
+  fileName <- constructFileName(baseFileName = 'Reference_Plate_QC', fileExtension = 'xlsx')
+
+  # fileName <- paste0(rootExportDirectory, "/", fileName)
+
+  openxlsx::saveWorkbook(wb,file=fileName, overwrite = T)
 }
 
 
-#' This method performs the imputation method on missing data. This is not typically part of the current data processing steps.
+#' This method performs the imputation method on missing data.
+#' This is not typically part of the current data processing steps.
 #' @param plateSet input plateset to work on
-#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1%
+#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1 percent.
 #' @param colsToImpute the set of parameters or parameter abbreviations to impute.
 #' @return returns a plateSet object with imputed data values.
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
@@ -344,14 +402,6 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #' @export
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
-
-  #print(parameter)
-
-  print(colnames(plate@plateData))
-  print(parameter)
-  print(textValues)
-  print(numericValues)
-
   vals <- plate@plateData[,parameter]
 
   for(val in textValues) {
@@ -376,13 +426,9 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
-      print("initial common params")
-      print(commonParams)
       commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
-      print("other params")
-      print(params)
       paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
       commonParamNames <- intersect(commonParamNames, paramNames)
@@ -417,13 +463,9 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
-      print("hey in data transform")
-
       # plateData may include wellIds in first column, so for numeric transformation, we need to skip first column using firstDataCol
       refData <- refPlate@plateData[,firstDataCol:ncol(refPlate@plateData)]
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
-
-      print("Have ref and expt data")
 
       suppressWarnings(
       refData <- sapply(refData, 'as.numeric')
@@ -683,7 +725,6 @@ aucParameterPatch <- function(aso) {
     i=1
     plate <- aso@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
-      #print(n)
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
         plate@parameters[i] <- "Area Under Curve (RFUs)"
@@ -779,7 +820,6 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
     openxlsx::mergeCells(wb, sheet=1, cols = prevStart:(prevStart+concCount-1), rows = 1)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 1, cols = prevStart)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 2, cols = prevStart:(prevStart+concCount-1))
-    #print(paste0(prevStart," to ",(prevStart + concCount)))
     startCol = startCol + concCount
   }
 
@@ -796,7 +836,9 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
                                   type = "expression", rule=">0.1", style = emptyStyle)
 
   fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", fileName)
+
+  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = aso@plateSet@plateNames[2],
+                               fileExtension = "xlsx")
 
   # lets add the unpivoted table
   openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
@@ -805,8 +847,10 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
 }
 
 
-#' A utility method to export transformed data. The transformed data represents change between the ASO treated state and teh control/untreated state.
+#' A utility method to export transformed data. The transformed data represents
+#' change between the ASO treated state and teh control/untreated state.
 #' @param aso an aso object from which to export transformed data.
+#' @export
 exportTransformedData <- function(aso) {
   data <- data.frame(aso@plateSet@transformedPlateData[[1]])
 
@@ -817,11 +861,121 @@ exportTransformedData <- function(aso) {
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- paste0("Transformed_Plate_Data_",format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx")
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
+                                fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
-
 }
 
 
+#' Exports a colelction of random forest results into one file, along with Benchmark Dose.
+#' @param aso The aso object containing the RandomForest Results
+#' @export
+exportRandomForestResults <- function(aso) {
+
+  fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
+                                fileExtension = "xlsx")
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  for(resName in names(aso@rfResults)) {
+
+    res <- aso@rfResults[[resName]]@prediction_means
+
+    print(colnames(res))
+    resName <- paste0(resName, "_pred_means")
+    predResults[[resName]] <- res
+
+    if(iter == 1) {
+      bmd <- getBenchmarkDose(res)
+      rownames(bmd) <- rownames(res)
+    } else {
+      bmd <- cbind(bmd, getBenchmarkDose(res))
+    }
+
+    iter = iter + 1
+  }
+
+  colnames(bmd) <- names(aso@rfResults)
+  bmdList <- list(bench_mark_dose=bmd)
+  predResults <- append(bmdList, predResults)
+
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@prediction_sds
+    resName <- paste0(resName, "_pred_sds")
+    predResults[[resName]] <- res
+  }
+
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@predictions
+    resName <- paste0(resName, "_pred_full")
+    predResults[[resName]] <- res
+  }
+
+  openxlsx::write.xlsx(predResults, file=fileName, rowNames=T)
+}
+
+
+getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
+  colNames <- colnames(predictionMeans)
+
+  bmdDf <- data.frame(matrix(nrow=nrow(predictionMeans), ncol=1))
+
+  for(row in 1:nrow(predictionMeans)) {
+    for(col in 1:ncol(predictionMeans)) {
+      if(!is.na(predictionMeans[row,col]) && predictionMeans[row,col] >= predCutoff) {
+        bmdDf[row, 1] <- colNames[col]
+        break
+      }
+      # fall through
+      bmdDf[row, 1] <- NA
+    }
+  }
+
+  return(bmdDf)
+}
+
+
+#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes rfResults slot.
+#' @param aso The aso object containing Random Forest result.
+#' @export
+exportRfPredictionHeatmaps <- function(aso) {
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  rfRes = NULL
+  timeLabels = c()
+  levels = c()
+  for(resName in names(aso@rfResults)) {
+    res <- aso@rfResults[[resName]]@prediction_means
+    if(iter == 1) {
+      rfRes = res
+    } else {
+      rfRes = cbind(rfRes, res)
+    }
+
+    timeLabels = c(timeLabels, rep(resName, ncol(res)))
+    levels = c(levels, resName)
+    iter = iter + 1
+  }
+
+  timeLabels <- factor(timeLabels, levels=levels)
+
+  rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+                           column_title_side = "top", column_names_side="top", name = 'Prediction',
+                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+
+  fileName <- aso:::constructFileName(paste0(aso@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
+                          fileExtension = "pdf")
+
+  pdf(file=fileName, width=13, height=6)
+  print(rfhm)
+
+  dev.off()
+
+}
 
