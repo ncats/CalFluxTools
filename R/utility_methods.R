@@ -284,9 +284,9 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
   fileName <- constructFileName(baseFileName = 'Reference_Plate_QC', fileExtension = 'xlsx')
 
-  # fileName <- paste0(rootExportDirectory, "/", fileName)
-
   openxlsx::saveWorkbook(wb,file=fileName, overwrite = T)
+
+  return(paste0(getwd(), "/", fileName))
 }
 
 

@@ -31,3 +31,8 @@ Imports:
     readr,
     rlist,
     scales
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/testthat/start-first: loadParameterFile, loadPlateData, loadPlateMap, filterSelectedParameters, applyDataCoverageFilters, runReferencePlateQC
+
