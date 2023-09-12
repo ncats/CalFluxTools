@@ -31,8 +31,7 @@ setClass("plateset", slots=list(
   transformedPlateData = "list",
   transformationNames = "vector",
   dataCoverageTables = "list"
-)
-)
+))
 
 #' @export
 setClass("aso", slots=list(
@@ -45,8 +44,8 @@ setClass("aso", slots=list(
 ))
 
 
-#' @export
 #' @import caret
+#' @export
 setClass("randomForest", slots=list(
   model = "train",
   predictions = "data.frame",

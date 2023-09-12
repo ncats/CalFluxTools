@@ -1,7 +1,7 @@
 Package: aso
 Type: Package
 Title: Package for internal use at NCATS, used for parsing and analyzing Stemonix plate data
-Version: 0.1.0
+Version: 0.2.0
 Author: Andrew Patt, John Braisted
 Maintainer: The package maintainer <yourself@somewhere.net>
 Description: More about what it does (maybe more than one line)
@@ -34,5 +34,6 @@ Imports:
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-Config/testthat/start-first: loadParameterFile, loadPlateData, loadPlateMap, filterSelectedParameters, applyDataCoverageFilters, runReferencePlateQC
+Config/testthat/start-first: loadParameterFile, loadPlateData, loadPlateMap, filterSelectedParameters, 
+    applyDataCoverageFilters, runReferencePlateQC, transformData
 
