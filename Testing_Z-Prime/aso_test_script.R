@@ -6,13 +6,436 @@ library(dplyr)
 library(plotly)
 library(lme4)
 library(janitor)
+library(devtools)
+library(plotly)
+library(kpodclustr)
+library(tidyverse)
+library(ggcorrplot)
+library(caret)
+library(randomForest)
+library(readxl)
+library(Boruta)
+library(umap)
+library(ComplexHeatmap)
+library(forcats)
+library(ggpubr)
+library(gridExtra)
+library(tibble)
+library(glmnet)
+
 
 # edit this working directory location for your directory that has the data
 parameterFile <-"FLIPR_Analysis_parameters_Run_7_New_Replacement_Options.xlsx"
 
-# this builds the aso data and exports all the qc files and transformed data
-aso <- aso:::runDataProcessing(parameterFile)
 
+# this builds the aso data and exports all the qc files and transformed data
+aso30 <- aso:::runDataProcessing(parameterFile30)
+aso60 = aso:::runDataProcessing(parameterFile60)
+aso90 = aso:::runDataProcessing(parameterFile90)
+
+plateTransformedData = aso30@plateSet@transformedPlateData
+
+plateMap <- aso30@plateSet@plates[[1]]@plateAnnotMap
+
+dataType = "transformed"
+
+if(dataType == 'transformed'){
+  testData <- plateTransformedData[['60min_vs_Ref_(log2ratio)']]
+} else if (dataType == "raw"){
+  testData <- aso@plateSet@plates[[2]]@plateData
+}
+
+tableWithAnnotation <- cbind(plateMap, testData)
+
+splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
+
+splicedDataClean = splicedData[splicedData$WellType == 'Test',]
+
+#Begin LASSO regression testing
+splicedDataTraining = splicedData[splicedData$WellType == 'Positive Control' |
+                                    splicedData$WellType == 'Negative Control',] %>%
+  subset(select = -c(Well, Compound, Spheroid, Mask, Concentration))
+
+for(i in 1:length(splicedDataTraining$WellType)){
+  if(splicedDataTraining$WellType[i] == "Positive Control"){
+    splicedDataTraining$WellType[i] = as.numeric(1)
+  } else {
+    splicedDataTraining$WellType[i] = as.numeric(0)
+  }
+}
+
+y = splicedDataTraining$WellType %>% as.numeric()
+x = data.matrix(splicedDataTraining[, -1])
+
+cv_model = cv.glmnet(x, y, alpha = 1)
+
+#Begin Logistic Regression Testing --> NOT WORKING, USING LASSO REGRESSION INSTEAD
+splicedDataTraining = splicedData[splicedData$WellType == 'Positive Control' |
+                                    splicedData$WellType == 'Negative Control',] %>%
+  subset(select = -c(Well, Compound, Spheroid, Mask, Concentration)) %>%
+  mutate_at(vars(-WellType), as.numeric)
+
+randomTesting = sample(c(1:100), size  = length(splicedDataTraining$WellType))
+splicedDataTrainingRandom = cbind(splicedDataTraining, randomTesting)
+
+
+splicedDataTesting = splicedData[splicedData$WellType == "Test",] %>%
+  subset(select = -c(Well, Compound, Spheroid, Mask, Concentration))
+
+
+splicedDataTrainingRandom$WellType = as.factor(splicedDataTrainingRandom$WellType)
+
+completelyRandom = data.frame(replicate(10,sample(0:100,20,rep=TRUE)))
+completelyRandom = cbind(splicedDataTraining$WellType, completelyRandom)
+names(completelyRandom)[1] = "WellType"
+completelyRandom$WellType = as.factor(completelyRandom$WellType)
+
+
+logisticModel = glm(WellType ~ ., family = "binomial", data = completelyRandom)
+
+logisticPredictions = predict(logisticModel, newdata = splicedDataTesting, type = "response")
+
+test_df = cbind(splicedDataTesting, logisticPredictions)
+
+#Testing pca for new data set
+new_pca = aso:::runPca(aso90, dataType = "test", compoundIDList = c('M1_QIA', 'Veh'))
+new_pca_plot = aso:::plotPCA(new_pca, pcaType = 1)
+new_pca_plot = new_pca_plot + labs(title = "Wells PCA - 90 Minute") +
+  theme(axis.text = element_text(size=15)) + theme(axis.title = element_text(size=15)) +
+  theme(title = element_text(size = 15))
+
+#Testing ZPrime for new data set
+aso:::zFactor(aso)
+
+#Creating ZPrime Plot
+zPrimeList30 = aso:::zFactor(aso30) %>% rownames_to_column("Parameter")
+zPrimeList30 = zPrimeList30[, c("Parameter", "zFactor")]
+colnames(zPrimeList30)[2] = "zFactor30"
+
+zPrimeList60 = aso:::zFactor(aso60)
+zPrimeList60 = zPrimeList60[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList60)[1] = "zFactor60 Original"
+
+zPrimeList60Mask = aso:::zFactor(aso60, masking = "H15")
+zPrimeList60Mask = zPrimeList60Mask[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList60Mask)[1] = "zFactor60 QC"
+
+zPrimeList90 = aso:::zFactor(aso90)
+zPrimeList90 = zPrimeList90[, "zFactor"] %>% as.data.frame()
+colnames(zPrimeList90)[1] = "zFactor90"
+
+zPrimeList = cbind(zPrimeList30, zPrimeList60, zPrimeList60Mask, zPrimeList90)
+zPrimeData = data.frame(matrix(NA, nrow = 4* nrow(zPrimeList), ncol = 3))
+
+zPrimeData[1:16, 1] = "30'"
+zPrimeData[17:32, 1] = "60'"
+zPrimeData[33:48, 1] = "60' QC"
+zPrimeData[49:64, 1] = "90'"
+
+colnames(zPrimeData)[1] = "Time"
+colnames(zPrimeData)[2] = "Value"
+colnames(zPrimeData)[3] = "Parameter"
+
+zPrimeData[1:16, 2] = zPrimeList[,2]
+zPrimeData[17:32, 2] = zPrimeList[,3]
+zPrimeData[33:48, 2] = zPrimeList[,4]
+zPrimeData[49:64, 2] = zPrimeList[,5]
+
+zPrimeData[1:16, 3] = zPrimeList[,1]
+zPrimeData[17:32, 3] = zPrimeList[,1]
+zPrimeData[33:48, 3] = zPrimeList[,1]
+zPrimeData[49:64, 3] = zPrimeList[,1]
+
+zPrimePlot = ggplot(data = zPrimeData, aes(x = Time, y = Value, color = Parameter)) +
+  geom_point(size = 3) + ylab("Z Prime Value") + ggtitle("Z Prime Statistic - Quality Control") +
+  annotate('rect', xmin = 0, xmax = 5, ymin = 0.5, ymax = 1, fill = 'green', alpha = 0.2) +
+  annotate('rect', xmin = 0, xmax = 5, ymin = 0, ymax = 0.5, fill = 'yellow', alpha = 0.2) +
+  annotate('rect', xmin = 0, xmax = 5, ymin = -2, ymax = 0, fill = 'red', alpha = 0.2) +
+  geom_jitter(width = 0.2, size = 3) + theme(axis.text = element_text(size=15)) +
+  theme(axis.title = element_text(size=15)) + theme(title = element_text(size = 15))
+
+
+#Testing implementation of random forest function, NOT WORKING RIGHT NOW, NEED HELP
+aso:::asoRandomForest(aso60)
+
+#Begin method implementation for random forest
+data_imputed<-aso60@plateSet@transformedPlateData[[1]]
+sample_info <- aso60@plateSet@plates[[1]]@plateAnnotMap
+
+data_imputed <- data_imputed[which(sample_info$Compound!="Empty"),]
+sample_info <- sample_info %>%
+  filter(Compound!="Empty")
+data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
+
+#Variable Correlations
+corr <- round(cor(data_imputed), 1)
+ggcorrplot(corr, method = "circle", hc.order="TRUE")
+
+#Andy's PCA, FIGURE OUT HOW TO IMPLEMENT THIS IN THE CODE
+pca_res <- prcomp(data_imputed, scale.=TRUE)
+pca_df <- pca_res$x[,1:2] %>%
+  as.data.frame() %>%
+  mutate(WellType = sample_info$WellType) %>%
+  mutate(Compound = sample_info$Compound) %>%
+  mutate(Well = sample_info$Well) %>%
+  mutate(Concentration = as.character(sample_info$Concentration))
+
+p <- ggplot(pca_df, aes(x=PC1,y=PC2,color=Compound)) +
+  geom_point(aes(text=paste0("Well Type: ",WellType, "\nConcentration: ",Concentration, "\nWell Number: ", Well))) + theme_classic()
+ggplotly(p,tooltip=c("text","color","shape"))
+
+
+#Danyal's Random Forest that includes concentration as a predictor
+
+data_labels <- pca_df$WellType
+training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+training_labels <- factor(data_labels[training_rows])
+training_data <- data_imputed[training_rows,] %>% as.data.frame
+training_data$label <-training_labels
+concentration_labels <- as.numeric(pca_df$Concentration[training_rows])
+new_training_data = cbind(concentration_labels, training_data)
+
+#Generate new labels that are numeric
+cont_training_data = new_training_data
+updated_labels = data.frame()
+for(i in 1:length(cont_training_data$concentration_labels)){
+  if(cont_training_data$label[i] == "Positive Control"){
+    updated_labels[i,1] = as.numeric(1)
+  } else {
+    updated_labels[i,1] = as.numeric(0)
+  }
+}
+
+#Remove old label column and add new label column
+colnames(updated_labels) = "label"
+cont_training_data = subset(cont_training_data, select = -label)
+cont_training_data = cbind(cont_training_data, updated_labels)
+
+#If we want to revert to old method, change data to new_training_data
+new_model <- train(label ~ .,
+               data =  cont_training_data,
+               method = "rf",
+               trControl = trainControl(method = "cv",number=10))
+
+#needed to change  here because vehicle and control don't have same concentrations
+#can revert to original if they have the same concentrations
+testing_rows = which(data_labels == 'Test' & pca_df$Compound != 'PBS')
+testing_data <-  data_imputed[testing_rows,] %>% as.data.frame
+clean_conc_labels = as.numeric(pca_df$Concentration[testing_rows])
+new_testing_data = cbind(clean_conc_labels, testing_data)
+colnames(new_testing_data)[1] = "concentration_labels"
+
+
+new_test_labels <- predict(new_model, newdata = new_testing_data)
+new_predictions <- data.frame(aso=pca_df$Compound[testing_rows],Concentration = pca_df$Concentration[testing_rows],
+                          class=new_test_labels)
+#new_predictions_pos = new_predictions %>% filter(class == 'Positive Control')
+
+
+#Below is the new implementation (continuous prediction)
+#List the diff compounds in aso object
+compound_list = unique(new_predictions$aso)
+
+prediction_mean = data.frame()
+prediction_sd = data.frame()
+prediction_stats = data.frame()
+
+for(i in compound_list){
+  #create concentration list for each compound
+  conc_list = unique(new_predictions[new_predictions$aso == i, 'Concentration'])
+
+  for(j in conc_list){
+    #create class list for each concentration of each compound
+    class_df = new_predictions[new_predictions$aso == i & new_predictions$Concentration == j, 'class'] %>%
+      as.numeric %>%
+      as.data.frame()
+
+    #calculate average prediction and standard deviation
+    mean_class = mean(class_df$.)
+    sd_class = sd(class_df$.)
+
+    prediction_mean[i,j] = mean_class
+    prediction_sd[i,j] = sd_class
+
+  }
+}
+
+#Making a combined predictions data frame that looks pretty if we want to export
+aso_predictions = prediction_mean
+
+for(i in 1:nrow(prediction_mean)){
+  for(j in 1:ncol(prediction_mean)){
+    aso_predictions[i,j] = paste0(format(round(prediction_mean[i,j], 4), nsmall = 4),
+                                  " (", format(round(prediction_sd[i,j], 4), nsmall = 4), ")")
+
+  }
+}
+
+
+#Heatmap
+pred_heatmap = Heatmap(as.matrix(prediction_mean), rect_gp = gpar(col = "white", lwd = 2),
+        column_title = "Concentration", column_title_side = "bottom", name = 'Prediction',
+        row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
+        column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean)))))
+
+
+#Making the ggplots with error bars (can also do in excel)
+
+pred_plot_mean = t(prediction_mean) %>% as.data.frame()
+pred_plot_mean = setNames(cbind(rownames(pred_plot_mean), pred_plot_mean,
+                                row.names = NULL), c("Concentration", colnames(pred_plot_mean)))
+
+pred_plot_sd = t(prediction_sd) %>% as.data.frame()
+pred_plot_sd = setNames(cbind(rownames(pred_plot_sd), pred_plot_sd,
+                              row.names = NULL), c("Concentration", colnames(pred_plot_sd)))
+pred_plot_sd = subset(pred_plot_sd, select = -Concentration)
+
+
+for(i in 1:length(unique(colnames(pred_plot_sd)))){
+  if(!grepl("sd", colnames(pred_plot_sd)[i])){
+    colnames(pred_plot_sd)[i] = paste0("sd",colnames(pred_plot_sd)[i])
+  }
+}
+
+#Combined data frame that has mean and sd in separate columns, can export if needed
+pred_plot_df = cbind(pred_plot_mean, pred_plot_sd)
+
+aso_plot_list = list()
+for(i in 1:length(unique(new_predictions$aso))){
+
+  concDotPlot = ggplot(data = new_predictions[new_predictions$aso == paste0('ASO', i),],
+                       aes(x = Concentration, y = class)) +
+    geom_dotplot(binaxis = 'y', stackdir = 'center') +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="errorbar", color="red", width=0.2) +
+    ggtitle(paste0('ASO', i)) + aes(x = fct_inorder(Concentration)) + xlab("Concentration") +
+    coord_cartesian(ylim=c(-0.1, 1.1)) + scale_y_continuous(breaks=seq(0, 1, 0.25)) +
+    geom_point(size=2) + ylab('Prediction')
+
+  aso_plot_list[[i]] = concDotPlot
+
+}
+
+nrow_plot_grid = ceiling(length(aso_plot_list)/2)
+
+pdf("ASOConcPlots.pdf")
+do.call(grid.arrange, c(aso_plot_list[1:6], nrow=3, ncol=2))
+do.call(grid.arrange, c(aso_plot_list[7:12], nrow=3, ncol=2))
+dev.off()
+
+#email: prediction paramater is now continuous instead of class, made Heatmap and DotPlots for each ASO
+#Might work for when there are fewer replicates and any number of ASOs in plate
+#Benchmark Dose Tools or Point of Departure stuff
+#Curve Fitting Stuff in R resources (or python), just do some research
+
+
+#Can generalize this as well, but what's the point, the dot plot is better anyways
+
+concBarPlot = ggplot(data = pred_plot_df, aes(x = Concentration, y = ASO1)) +
+  geom_bar(stat = 'identity', color = 'black', fill = 'blue', position = position_dodge()) +
+  geom_errorbar(aes(ymin = ASO1 - sdASO1, ymax = ASO1 + sdASO1),
+                width = 0.2, position = position_dodge(0.9)) +
+  ggtitle(paste0('ASO', 1)) + aes(x = fct_inorder(Concentration)) + xlab("Concentration") +
+  ylim(0, 1)
+
+
+#This would be very easy to generalize with a for loop, and would create a bunch of plots
+#Not exactly sure how to organize them, though, or whether that can even be automated
+#It's automated now yay
+
+concDotPlotTest = ggplot(data = new_predictions[new_predictions$aso == 'ASO1',],
+                     aes(x = Concentration, y = class)) +
+  geom_dotplot(binaxis = 'y', stackdir = 'center') +
+  stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+               geom="errorbar", color="red", width=0.2) +
+  ggtitle("ASO1") + aes(x = fct_inorder(Concentration))
+
+#Below is implementation for the old method (fraction positive control if multiple replicates)
+
+#initialize a dataframe
+prediction_fraction = data.frame()
+
+counter = 1
+
+for(i in compound_list){
+  #create concentration list for each compound
+  conc_list = unique(new_predictions[new_predictions$aso == i, 'Concentration'])
+
+  for(j in conc_list){
+    #create class list for each concentration of each compound
+    class_list = new_predictions[new_predictions$aso == i & new_predictions$Concentration == j, 'class'] %>%
+      as.data.frame()
+
+    #count the number of positive and negative controls
+    num_pos = length(which(class_list == 'Positive Control'))
+    num_neg = length(which(class_list == 'Negative Control'))
+
+    #determine fraction of positive controls
+    fraction_positive = num_pos / (num_pos+num_neg)
+
+    prediction_fraction[i,j] = fraction_positive
+}
+}
+
+
+#output a df, each row is an ASO, columns are concentration and then for each concentration give a fraction positive count
+#essentially show a dose response outcome to summarize, at which concentration is the aso classified as toxic
+#Think of the "point of departure" thing, at what point is there a significant change
+#Do a heatmap of that has fraction of replicated that are positive
+#Maybe aggregate is the best way to go, but if that doesn't work, manually reformat
+
+
+
+
+#Determining (assess/evaluate) Anti Sense Oligonucleotides (ASOs) toxicity in neuronal organoid culture
+#Automated evaluation of Anti Sense Oligonucleotide toxicity in neuronal organoid culture
+
+#An R Package to Evaluate Anti-sense Oligonucleotide Toxicity Data in Neuronal Organoid Cultures
+
+#keywords: automated, ASO, toxicity, neuron,
+
+
+
+
+
+
+#Andy's original Random Forests Positive Predictions
+data_labels <- pca_df$WellType
+training_rows <- which(data_labels == "Positive Control" | data_labels == "Negative Control")
+training_labels <- factor(data_labels[training_rows])
+training_data <- data_imputed[training_rows,] %>% as.data.frame
+training_data$label <-training_labels
+
+model <- train(label ~ .,
+               data = training_data,
+               method = "rf",
+               trControl = trainControl(method = "cv",number=10))
+
+testing_data <-  data_imputed[-training_rows,] %>% as.data.frame
+test_labels <- predict(model, newdata = testing_data)
+predictions <- data.frame(aso=pca_df$Compound[-training_rows],Concentration = pca_df$Concentration[-training_rows],
+                          class=test_labels)
+predictions %>% filter(class == "Positive Control")
+
+#variable importance
+BorutaModel <- Boruta(label ~ .,
+                      data = training_data)
+plot(BorutaModel,las=2)
+
+# Andy's UMAP
+umap_res <- umap(data_imputed)
+umap_df <- umap_res$layout %>%
+  as.data.frame() %>%
+  mutate(WellType = sample_info$WellType) %>%
+  mutate(Compound = sample_info$Compound) %>%
+  mutate(Concentration = as.character(sample_info$Concentration))
+
+p <- ggplot(umap_df, aes(x=V1,y=V2,color=Compound)) +
+  geom_point(aes(text=paste0("Well: ",Well, "\nConcentration: ",Concentration))) + theme_classic()
+ggplotly(p,tooltip=c("text","color","shape"))
+
+
+# all of the below is the working progress for the LME
 plateTransformedData = aso@plateSet@transformedPlateData
 
 plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
@@ -91,6 +514,7 @@ anovaFit$'Pr(>Chisq)'[2]
 
 
 
+
 for(i in 1:length(unique(plateMapClean$Concentration))){
   #Maybe think about making this more generalizable to potentially different concentrations
   #thoughts for later
@@ -105,9 +529,9 @@ for(i in 1:length(unique(plateMapClean$Concentration))){
 
 
 
-#Calls for PCA method below
+#Calls for Danyal's PCA method below
 
-pcaList = aso:::runPca(aso, dataType = 'transformed', compoundIDList = c('IDT', 'PBS', 'QIA', 'Veh'))
+pcaList = aso:::runPca(aso)
 
 testPcaPlot = aso:::plotPCA(pcaList, 1)
 
@@ -263,3 +687,36 @@ zFactor <- function(aso, analysisParameter){
 }
 
 zFactor(aso, "PkAmp")
+
+#Titanic testing
+training.data.raw <- read.csv('train.csv',header=T,na.strings=c(""))
+
+sapply(training.data.raw,function(x) sum(is.na(x)))
+
+sapply(training.data.raw, function(x) length(unique(x)))
+
+missmap(training.data.raw, main = "Missing values vs observed")
+
+data <- subset(training.data.raw,select=c(2,3,5,6,7,8,10,12))
+
+data$Age[is.na(data$Age)] <- mean(data$Age,na.rm=T)
+
+data$Sex = as.factor(data$Sex)
+data$Embarked = as.factor(data$Embarked)
+
+is.factor(data$Sex)
+
+is.factor(data$Embarked)
+
+contrasts(data$Sex)
+contrasts(data$Embarked)
+
+data <- data[!is.na(data$Embarked),]
+rownames(data) <- NULL
+
+train <- data[1:800,]
+test <- data[801:889,]
+
+model <- glm(Survived ~.,family=binomial(link='logit'),data=train)
+
+summary(model)

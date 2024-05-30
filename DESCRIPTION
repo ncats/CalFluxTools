@@ -11,13 +11,23 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.3
 Imports: 
+    Boruta,
+    caret,
     circlize,
     ComplexHeatmap,
     cowplot,
     dplyr,
+    forcats,
+    ggfortify,
     ggplot2,
+    ggpubr,
+    ggrepel,
+    grid,
     gridExtra,
+    janitor,
+    logger,
     plotly,
+    randomForest,
     readr,
     rlist,
     scales

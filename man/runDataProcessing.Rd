@@ -5,7 +5,7 @@
 \title{This method is a wrapper method that performs all data processing operations according to the supplied ASO Parameter File.
 The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.}
 \usage{
-runDataProcessing(asoParameterXlsxFilePath)
+runDataProcessing(aso)
 }
 \arguments{
 \item{asoParamterXlsxFilePath}{a file path and file name for the ASO parameter xlsx file. All information required to process aso data is contained in this file.}

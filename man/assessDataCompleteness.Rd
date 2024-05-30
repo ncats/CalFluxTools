@@ -7,6 +7,9 @@ The missing data report is entered into the aso object.}
 \usage{
 assessDataCompleteness(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object containing the missing data report in the dataCoverageTables slot
 }

@@ -1,3 +1,40 @@
+#' Starts a log file.
+initializeLog <- function(logLevel="INFO") {
+  logger::log_level(logLevel)
+  logFileName <- paste0(getwd(),"/ASO_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
+  logger::log_appender(logger::appender_file(logFileName))
+
+  logger::log_info("ASO Analysis Started -- Log Initialized")
+}
+
+idleLog <- function() {
+  logger::log_level(logger::ERROR)
+  logFileName <- paste0(getwd(), "/idle_log.log")
+  logger::log_appender(logger::appender_tee(logFileName))
+}
+
+initializedExportLocation <- function(aso) {
+  outDir <- constructFileName(baseFileName = paste0(aso@methodParameters$analysis_name, "_ASO_Analysis"))
+  path <- paste0(getwd(), "/", outDir)
+  if(!dir.exists(path)) {
+    dir.create(path)
+  }
+  setwd(path)
+  return(path)
+}
+
+constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension = "", appendTimeStamp=T, appendSubdir=NULL) {
+  fileName = baseFileName
+  if(nchar(plateReadLabel) > 0) {
+    fileName <- paste0(fileName, "_", plateReadLabel)
+  }
+  if(appendTimeStamp) {
+    fileName <- paste0(fileName, "_", format(Sys.time(), "%Y%m%d_%H%M"))
+  }
+  fileName <- paste0(fileName, ".", fileExtension)
+
+  return(fileName)
+}
 
 #' Add a plate to a plateset
 #'
@@ -13,6 +50,25 @@ addPlate <- function(plateset, plate, label) {
   return(plateset)
 }
 
+#' @title subsetPlateSet
+#' @description
+#'    Reduce platesSet object to the specified plate indices. This utility method is intended to be run prior to generation of transformed data and QC.
+#'
+#' @param plateSet The plateset to subset
+#' @param plateIndicesToKeep The indices with in the plate collection to keep in the new PlateSet object
+#'
+#' @export
+subsetPlateSet <- function(plateSet, plateIndicesToKeep) {
+
+  plateSet@plateIdList <- plateSet@plateIdList[plateIndicesToKeep]
+  plateSet@plates <- plateSet@plates[plateIndicesToKeep]
+  plateSet@plateNames <- plateSet@plateNames[plateIndicesToKeep]
+
+  print(length(plateSet@plates))
+
+  return(plateSet)
+}
+
 
 #' filterLowDataParameters
 #'
@@ -22,8 +78,6 @@ addPlate <- function(plateset, plate, label) {
 #'
 #' @return a plate with updated plate data
 #' @export
-#'
-#' @examples
 filterLowDataParameters <- function(plate, thresholdType = 'well_count', missingDataThreshold = 10) {
 
   missingData <- missingDataReport(plate)
@@ -38,11 +92,12 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
 }
 
 
+#' Utility method to replace blank and NA data with replacement values.
+#' @param plateSet the plateset object to work on
+#' @param blankReplacements a list object with parameter abbreviation keys and replacement values
+#' @param naRelacements a list object with parameter abbreviations keys and replacement values
+#' @return a plateset object with plate data replaced according to input values
 replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
-
-  #plateSet <- aso@plateSet
-  #blankReplacements <- blankParamsList
-  #naReplacements <- naParamList
 
   # run replacement for each plate
   # extract plate data for the plate
@@ -82,12 +137,17 @@ replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
     plate@plateData <- df
     plateSet@plates[[plateName]] <- plate
   }
-
   return(plateSet)
 }
 
+#' Runs a quality control process on the reference plate read. The method will export a excel report file.
+#' @param plateSet the plate set to run QC on
+#' @param rootExportDirectory the directory for report output.
+#' @param plateFile the plate file name so that the report can capture the input plate file name.
 runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   refPlate <- plateSet@plates[[1]]
+
+  plateAnnot <- plateSet@plates[[1]]@plateAnnotMap
 
   df <- refPlate@plateData
   df <- sapply(df, as.numeric)
@@ -125,6 +185,8 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   # add number of parameters that exceed 1SD absolute for each well
   z1SDsums <- zDf > 1.0 | zDf < -1.0
   z1SDsums <- rowSums(z1SDsums)
+  z3SDsums <- zDf > 3.0 | zDf < -3.0
+  z3SDsums <- rowSums(z3SDsums)
 
   # add the median absolute z-score as a column in zDf
   rowMedians <- apply(abs(zDf), MARGIN = 1, FUN=median)
@@ -133,6 +195,10 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   # add the frequency GT 1SD
   zDf$freq_GT_1SD <- z1SDsums
   zDf$fract_param_GT_1SD <- signif(zDf$freq_GT_1SD/(zNcol*1.0), digits=3)
+
+  zDf$freq_GT_3SD <- z3SDsums
+  zDf$fract_param_GT_3SD <- signif(zDf$freq_GT_3SD/(zNcol*1.0), digits=3)
+
 
   # make an absolute median plate zscore matrix
   zAbsMedianPlateDf <- data.frame(matrix(zDf$abs_CV_Median, nrow=16, byrow = T))
@@ -143,7 +209,7 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
   wb = openxlsx::createWorkbook()
   headerStyle = openxlsx::createStyle(textDecoration = "Bold", fontSize=14)
-  naString = "Empty"
+  naString = "Masked"
   openxlsx::addWorksheet(wb, "zScore_Data")
   rowNum = 1
 
@@ -189,17 +255,15 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
     lowerColorLim <- quantile(zMat, probs=(0.05), na.rm=T)
     upperColorLim <- quantile(zMat, probs=(0.95), na.rm=T)
-    print("row number just before cond format")
-    print(rowNum)
-    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
-    # '#4491fc'
+    openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#ffcf40','#ebf6f7', '#4491fc'), rows = rowNum:(nrow(zMat)+rowNum), cols = 2:(ncol(zMat)+1), rule=c(lowerColorLim, 0.0, upperColorLim))
 
     rowNum = rowNum + nrow(zMat) + rowSpacing
   }
 
   # add the z-score unpivoted matrix
   openxlsx::addWorksheet(wb, "Unpivoted_Zscore_Matrix")
+  zDf <- cbind(plateAnnot, zDf)
   rownames(zDf) <- refPlate@wellIds
   openxlsx::writeData(wb=wb, sheet=2, zDf, startRow=1, colNames=T, rowNames = T, keepNA = T, na.string=naString)
   openxlsx::freezePane(wb=wb, sheet=2, firstRow=T, firstCol=T)
@@ -216,26 +280,29 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   openxlsx::writeData(wb=wb, sheet=3, paste0("Plate Input File: ",plateFile), startRow=1, colNames=F, rowNames=F)
   openxlsx::writeData(wb=wb, sheet=3, cvs, startRow=2, colNames=T, rowNames = T)
 
-  fileName = format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(rootExportDirectory, "/", fileName)
+  fileName <- format(Sys.time(), "Reference_Plate_QC_%Y%m%d_%H%M.xlsx")
 
-  openxlsx::saveWorkbook(wb,file=fileName,overwrite = T)
+  fileName <- constructFileName(baseFileName = 'Reference_Plate_QC', fileExtension = 'xlsx')
 
+  # fileName <- paste0(rootExportDirectory, "/", fileName)
+
+  openxlsx::saveWorkbook(wb,file=fileName, overwrite = T)
 }
 
 
+#' This method performs the imputation method on missing data.
+#' This is not typically part of the current data processing steps.
+#' @param plateSet input plateset to work on
+#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1 percent.
+#' @param colsToImpute the set of parameters or parameter abbreviations to impute.
+#' @return returns a plateSet object with imputed data values.
 imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   plates <- plateSet@plates
 
   for(plateName in names(plates)) {
     plate <- plates[[plateName]]
-
-
-
     data <- plate@plateData
-
     d2 <- sapply(data, FUN=as.numeric, axis=1)
-
     d2 <- data.frame(d2)
 
     # does this ignore NaNs
@@ -276,14 +343,10 @@ imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
 
 
 #' missingDataReport reports on plate missing values
-#'
 #' @param plate ASO plate
 #' @param plateSize plate size, e.g. 384 (default)
-#'
 #' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
 #' @export
-#'
-#' @examples
 missingDataReport <- function(plate, plateSize = 384) {
 
   df <- plate@plateData
@@ -304,14 +367,12 @@ missingDataReport <- function(plate, plateSize = 384) {
   res$Missing_Count <- res[,1] + res[,2]
   res$Well_Count <- 384
   res$Empty_Wells <- colSums(df == "Empty")
-  res$Nonempty_Wells <- res$Well_Count - res$Empty_Wells
-  res$Good_Count <- res$Nonempty_Wells - res$Missing_Count
+  res$Masked_Wells <- colSums(df == "Masked")
+  res$Keeper_Wells <- (res$Well_Count - res$Empty_Wells) - res$Masked_Wells
+  res$Good_Count <- res$Keeper_Wells - res$Missing_Count
   res$Parameter <- rownames(res)
-
-  res <- res[,c(8,4,5,6,1,2,3,7)]
-
-  #colnames(res) <- c("parameter", "good_count", "missing_count", "na_count", "zero_count")
-
+  # reorganize column order
+  res <- res[,c(9,4,5,6,7,1,2,3,8)]
   return(res)
 }
 
@@ -324,8 +385,6 @@ missingDataReport <- function(plate, plateSize = 384) {
 #'
 #' @return returns a dataframe that summarizes the union of missing data across two referenced plates
 #' @export
-#'
-#' @examples
 platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
     # transform to plate dimensions
     # matrix multiply to get a result on which to report on 0's and NAs using missingDataReport on cloned plate
@@ -341,18 +400,8 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #'
 #' @return returns a copy of the plate having value substitutions for the discrete parameter
 #' @export
-#'
-#' @examples
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
-
-  #print(parameter)
-
-  print(colnames(plate@plateData))
-  print(parameter)
-  print(textValues)
-  print(numericValues)
-
   vals <- plate@plateData[,parameter]
 
   for(val in textValues) {
@@ -366,33 +415,26 @@ encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues
   return(plate)
 }
 
-
+#' A utility method to harmonize parameters across plates. Simply makes sure all plate reads contain the same parameters.
+#' @param plateSet the plateset to harmonize
+#' @returns a plateset object with various plate reads containing the same, consistent variables.
+#'
 harmonizeParametersAcrossPlates <- function(plateSet) {
-
   commonParams <- c()
   commonParamNames <- c()
   i = 1
   for(plate in plateSet@plates) {
     if(i == 1) {
       commonParams <- colnames(plate@plateData)
-      print("initial common params")
-      print(commonParams)
       commonParamNames <- plate@parameters
     } else {
       params <- colnames(plate@plateData)
-      print("other params")
-      print(params)
       paramNames <- plate@parameters
       commonParams <- intersect(commonParams, params)
       commonParamNames <- intersect(commonParamNames, paramNames)
     }
     i = i + 1
   }
-
-  print("Harmonizing.... common params")
-
-  print("Common params:")
-  print(commonParams)
 
   plateSet@plateNames
   for(name in plateSet@plateNames) {
@@ -402,9 +444,7 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
     plate@parameters <- commonParamNames
     plateSet@plates[[name]] <- plate
   }
-
   return(plateSet)
-
 }
 
 
@@ -416,30 +456,16 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
 #'
 #' @return returns a PlateSet object with an additional set of transformed data.
 #' @export
-#'
-#' @examples
 dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr = F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2) {
-
-  # bkgrndCorrected = F
-  #
-  # if(bkgrdCorr && !is.null(bkgrdSamples) && length(bkgrdSamples) > 0) {
-  #
-  #
-  #   bkgrndCorrected = T
-  # }
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
 
       refPlate <- plateSet@plates[[platePair[1]]]
       exptPlate <- plateSet@plates[[platePair[2]]]
 
-      print("hey in data transform")
-
       # plateData may include wellIds in first column, so for numeric transformation, we need to skip first column using firstDataCol
       refData <- refPlate@plateData[,firstDataCol:ncol(refPlate@plateData)]
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
-
-      print("Have ref and expt data")
 
       suppressWarnings(
       refData <- sapply(refData, 'as.numeric')
@@ -457,11 +483,12 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       } else if(method == 'pct_change') {
 
       }
-
   }
   return(plateSet)
 }
 
+
+## Not implemented yet. Intention was to be able to subtract a background value for each parameter
 backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median') {
 
   if(!is.null(bkgrdSamples) && length(bkgrdSamples) > 0) {
@@ -470,7 +497,6 @@ backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median
       getPlateDataForSampleAllParameters(plate, sampleName)
 
     }
-
   }
 }
 
@@ -483,8 +509,6 @@ backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median
 #' @param paramater the measured parameter to report on
 #'
 #' @return returns a matrix with dimensions corresponding to plate type. A01 is in upper left.
-#'
-#' @examples
 rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
   plateData <- as.numeric(plate@plateData[,parameter])
   map = ""
@@ -505,8 +529,6 @@ rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
 #' @param paramaters the vector of measured parameter to report on
 #'
 #' @return Returns a list of plate matrix objects, named by each of the measured parameters in parameter
-#'
-#' @examples
 rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
 
   plateData <- plate@plateData[parameters]
@@ -538,8 +560,6 @@ rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
 #' @param plate The plate containing the data to be trimmed
 #'
 #' @return A copy of the plate containing data for the remaining wells.
-#'
-#' @examples
 getEdgeWellTrimmedMatrixFromPlate <- function(plate) {
   droppedWellIds <- grep("01", plate@wellIds)
   droppedWellIds <- union(grep("A", plate@wellIds), droppedWellIds)
@@ -555,8 +575,6 @@ getEdgeWellTrimmedMatrixFromPlate <- function(plate) {
 #' @param plateDim dimenstion of the plate
 #'
 #' @return returns a list with two entries with keys 'rows' and 'cols'
-#'
-#' @examples
 getRowAndColumnNames <- function(plateDim = 384) {
   rows <- LETTERS[seq(from = 1, to = 16)]
   cols <- seq(from = 1, to = 24)
@@ -578,7 +596,6 @@ getRowAndColumnNames <- function(plateDim = 384) {
 #' @param maxSaturationCount the number of points (plate wells) to fall off the returned scale (half will be off high end, half of these off the low end)
 #'
 #' @return returns a vector with two numeric values, a low-end cutoff and a high-end cutoff, in that order
-#' @examples
 getPlateValueCutoffs <- function(plateMatrix, maxSaturationCount = 10) {
   vals <- unlist(plateMatrix)
 
@@ -592,7 +609,11 @@ getPlateValueCutoffs <- function(plateMatrix, maxSaturationCount = 10) {
   return(c(lowBall, hiBall))
 }
 
-
+#' Utility method to extract the plate data from a plate, for a given sample name (set of data rows) and parameter name (data column).
+#' @param plate the plate object from which to extract data.
+#' @param sampleName the name of the sample for which to extract data. Names are specified in the input platemap annotation file.
+#' @param parameter the parameter for which to pull data
+#' @return returns a data frame with well annotations and corresponding data
 getPlateDataForSample <- function(plate, sampleName, parameter) {
   data <- plate@plateData
   data <- data[parameter]
@@ -601,10 +622,13 @@ getPlateDataForSample <- function(plate, sampleName, parameter) {
   ann <- annot[annot$Compound == sampleName,]
   # appending the data to the annotation subset
   ann[[parameter]] <- unlist(data[data$wellId %in% ann$Well,][1])
-
   return(ann)
 }
 
+#' A utility method to report annotations and all data for a given sample
+#' @param plate the plate object from which to pull data
+#' @param sampleName the name of the sample (compound) for which to pull data.
+#' @return a data frame containing annotations and all parameter data for a given sample name
 getPlateDataForSampleAllParameters <- function(plate, sampleName) {
     # plate data and platemap annotations
     data <- plate@plateData
@@ -624,6 +648,11 @@ getPlateDataForSampleAllParameters <- function(plate, sampleName) {
 }
 
 
+#' A utility method to make a copy of a plate object
+#' May not be needed since assignments and parameter passing are copying values into a new copy.
+#'
+#' @param plate the plate to clone
+#' @return new plate copy
 clonePlate <- function(plate) {
   newPlate <- new("plate")
   newPlate@plateId <- plate@plateId
@@ -643,16 +672,14 @@ clonePlate <- function(plate) {
 }
 
 
+#' Reduces plate data to a set of parameters to keep.
+#' @param plate a plate object containing plateData
+#' @param paramsToKeep list of parameters to keep/maintain in the plateData, others will be filtered out.
+#' @return returns a new plate object with plateData only containing the specified parameteters.
 filterParametersOnList <- function(plate, paramsToKeep) {
   df <- plate@plateData
-  #print("filtering selected params...")
-
   cnames <- colnames(df)
-
   dnames <- setdiff(paramsToKeep, cnames)
-
-
-
   df <- df[,paramsToKeep]
 
   plate@plateData <- df
@@ -660,15 +687,14 @@ filterParametersOnList <- function(plate, paramsToKeep) {
 }
 
 
+#' Utility method to replace long parameter names with short abbreviations.
+#' The change is made within the plate's plateData object, and the plate's paramAbbrs data field is set.
+#' @param plate the plate on which to apply the abbreviations.
+#' @param abbrInfo a list object with parameter name keys and corresponding abbreviations as values.
+#' @return returns a plate object with plateData that uses abbreviations as column names
 applyParameterAbbreviations <- function(plate, abbrInfo) {
   df <- plate@plateData
-
-  # limit DF to statistics in the information dataframe, col 1
-  # df <- df[,abbrInfo[,1]]
-
   params <- colnames(df)
-
-  # need to capture abbreviations in the order of the columns
   abbrs <- c()
   for(col in params) {
     abbr <- abbrInfo[abbrInfo$Statistic == col,2]
@@ -688,6 +714,10 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
 }
 
 
+#' A utility method to replace the input AUC parameter name with a new name.
+#' The original text files contain unicode characters that not not well supported.
+#' @param aso the aso object to patch AUC parameter names
+#' @return returns an aso object with the AUC parameter names patched.
 aucParameterPatch <- function(aso) {
 
   # patch plate data
@@ -695,7 +725,6 @@ aucParameterPatch <- function(aso) {
     i=1
     plate <- aso@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
-      #print(n)
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
         plate@parameters[i] <- "Area Under Curve (RFUs)"
@@ -727,28 +756,26 @@ aucParameterPatch <- function(aso) {
   }
 
   aso@parameterInfo <- pInfo
-
   return(aso)
 }
 
 
+#' retrieve well data based on a collection of specified wells.
+#' @param plate a plate object from which to extract a subset of plateData
+#' @param wellSet the collection of wells (well ids) to pull data for.
+#' @return returns a dataframe object with all parameter data for the specified wells.
 getPlateDataByWellSet <- function(plate, wellSet) {
   rows <- match(wellSet, plate@wellIds)
   dataChunk <- plate@plateData[rows,]
   return(dataChunk)
 }
 
+
+#' This function exports a paired t-test result.
+#'  @param aso an aso object on which paired ttest has been run
+#'  @param ttestResult a dataframe represenint the ttest result
+#'  @param fileName the t-test result ouput file name.
 exportPairedTTestResult <- function(aso, ttestResult, fileName) {
-  # df <- data.frame(matrix(ncol=4, nrow=0))
-  # for(resName in names(ttest_result)) {
-  #   res <- ttest_result[[resName]]
-  #   sample <- unlist(strsplit(resName,split="_"))[1]
-  #   resList <- list(sample=sample, condition=resName, tval=res$statistic, pval=res$p.value)
-  # }
-
-  # fileName <- paste0(aso@methodParameters[['root_dir']], "/", "Ttest_Results.xlsx")
-  # openxlsx::write.xlsx(list(Paired_tTest_Results=ttestResult), fileName)
-
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
   tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
@@ -793,7 +820,6 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
     openxlsx::mergeCells(wb, sheet=1, cols = prevStart:(prevStart+concCount-1), rows = 1)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 1, cols = prevStart)
     openxlsx::addStyle(wb, sheet=1, centerColorStyle, rows = 2, cols = prevStart:(prevStart+concCount-1))
-    #print(paste0(prevStart," to ",(prevStart + concCount)))
     startCol = startCol + concCount
   }
 
@@ -801,7 +827,6 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
   openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#63BE7B','#FFEB84','#F8696B'), rows = 3:nrow(tPivot), cols = 3:(3+concCount-1))
 
   openxlsx::conditionalFormatting(wb, sheet=1, type="colorScale", style = c('#F8696B', '#EECBC4'), rule=c(0,0.1), rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)))
-
   emptyStyle <- openxlsx::createStyle(bgFill = "#ffffff")
 
   openxlsx::conditionalFormatting(wb, sheet=1, rows = 3:nrow(tPivot), cols = (3+2*concCount):((3+(2*concCount)+concCount-1)),
@@ -811,18 +836,22 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
                                   type = "expression", rule=">0.1", style = emptyStyle)
 
   fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
-  fileName <- paste0(aso@methodParameters[['root_dir']], "/", fileName)
+
+  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = aso@plateSet@plateNames[2],
+                               fileExtension = "xlsx")
 
   # lets add the unpivoted table
   openxlsx::writeData(wb, sheet=2, x=ttestResult, startCol = 1, startRow = 1)
 
   openxlsx::saveWorkbook(wb, fileName, overwrite = T)
-
 }
 
 
+#' A utility method to export transformed data. The transformed data represents
+#' change between the ASO treated state and teh control/untreated state.
+#' @param aso an aso object from which to export transformed data.
+#' @export
 exportTransformedData <- function(aso) {
-
   data <- data.frame(aso@plateSet@transformedPlateData[[1]])
 
   wellAnn <- aso@plateSet@plates[[1]]@plateAnnotMap
@@ -832,11 +861,121 @@ exportTransformedData <- function(aso) {
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- paste0("Transformed_Plate_Data_",format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx")
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
+                                fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
-
 }
 
 
+#' Exports a colelction of random forest results into one file, along with Benchmark Dose.
+#' @param aso The aso object containing the MachineLearning Results
+#' @export
+exportMachineLearningResults <- function(aso) {
+
+  fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
+                                fileExtension = "xlsx")
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  for(resName in names(aso@mlResults)) {
+
+    res <- aso@mlResults[[resName]]@prediction_means
+
+    print(colnames(res))
+    resName <- paste0(resName, "_pred_means")
+    predResults[[resName]] <- res
+
+    if(iter == 1) {
+      bmd <- getBenchmarkDose(res)
+      rownames(bmd) <- rownames(res)
+    } else {
+      bmd <- cbind(bmd, getBenchmarkDose(res))
+    }
+
+    iter = iter + 1
+  }
+
+  colnames(bmd) <- names(aso@mlResults)
+  bmdList <- list(bench_mark_dose=bmd)
+  predResults <- append(bmdList, predResults)
+
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@prediction_sds
+    resName <- paste0(resName, "_pred_sds")
+    predResults[[resName]] <- res
+  }
+
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@predictions
+    resName <- paste0(resName, "_pred_full")
+    predResults[[resName]] <- res
+  }
+
+  openxlsx::write.xlsx(predResults, file=fileName, rowNames=T)
+}
+
+
+getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
+  colNames <- colnames(predictionMeans)
+
+  bmdDf <- data.frame(matrix(nrow=nrow(predictionMeans), ncol=1))
+
+  for(row in 1:nrow(predictionMeans)) {
+    for(col in 1:ncol(predictionMeans)) {
+      if(!is.na(predictionMeans[row,col]) && predictionMeans[row,col] >= predCutoff) {
+        bmdDf[row, 1] <- colNames[col]
+        break
+      }
+      # fall through
+      bmdDf[row, 1] <- NA
+    }
+  }
+
+  return(bmdDf)
+}
+
+
+#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes mlResults slot.
+#' @param aso The aso object containing Random Forest result.
+#' @export
+exportRfPredictionHeatmaps <- function(aso) {
+
+  predResults = list()
+  bmd <- NULL
+  iter = 1
+
+  rfRes = NULL
+  timeLabels = c()
+  levels = c()
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@prediction_means
+    if(iter == 1) {
+      rfRes = res
+    } else {
+      rfRes = cbind(rfRes, res)
+    }
+
+    timeLabels = c(timeLabels, rep(resName, ncol(res)))
+    levels = c(levels, resName)
+    iter = iter + 1
+  }
+
+  timeLabels <- factor(timeLabels, levels=levels)
+
+  rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+                           column_title_side = "top", column_names_side="top", name = 'Prediction',
+                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+
+  fileName <- aso:::constructFileName(paste0(aso@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
+                          fileExtension = "pdf")
+
+  pdf(file=fileName, width=13, height=6)
+  print(rfhm)
+
+  dev.off()
+
+}
 

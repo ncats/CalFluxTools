@@ -7,6 +7,9 @@ Downstream methods will not be impacted by these well values.}
 \usage{
 maskEmptyWells(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object with specified wells masked.
 }

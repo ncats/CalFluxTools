@@ -6,6 +6,9 @@
 \usage{
 setParameterAbbreviaions(aso)
 }
+\arguments{
+\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+}
 \value{
 returns the aso object with parameter abbreviations set to use for all downstream reports.
 }
