@@ -21,7 +21,6 @@ processAsoData <- function(asoParameterXlsxFilePath) {
 
   aso:::initializeLog(logLevel = "TRACE")
 
-
   logger::log_info(paste0("Reading input parameter excel file ===> ",asoParameterXlsxFilePath))
     # parse parameter and analysis settings, builds initial aso object.
   aso <- aso:::readAsoParameterFile(asoParameterXlsxFilePath)
