@@ -277,7 +277,6 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
 #' @param parameter the parameter for which to return data.
 #' @param tMethod the transoformation method for the transformed data.
 getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio') {
-
   require('dplyr')
 
   #clone a transformed plate, and set transformed data as plate data
@@ -292,7 +291,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
   # set a temp name for the extracted parameter's value
   colnames(data)[ncol(data)] <- 'val'
-
+  data$val <- as.numeric(data$val)
   #compute mean and SD, via dplyr
   dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val, na.rm=T)))
   dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val, na.rm=T)))
@@ -312,16 +311,19 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   dataSum$sdHigh <- dataSum[,2] + dataSum$SD
 
   title <- paste0(sampleName, " -- ", parameter)
-
-  p <- ggplot2::ggplot(dataSum, ggplot2::aes(x=Concentration, y=dataSum[,2])) +
-    ggplot2::geom_bar(stat='identity', color = 'blue', fill=rgb(0.1,0.4,0.5,0.7)) +
-    ggplot2::geom_point(data=data, ggplot2::aes(x=Concentration, y=data[,ncol(data)])) +
-    ggplot2::geom_errorbar(ggplot2::aes(ymin=sdLow, ymax=sdHigh), width = 0.2) +
-    ggplot2::theme_classic() + ggplot2::labs(title=title, x="Concentration", y="log2FoldChange") +
-    ggplot2::geom_hline(yintercept = 0.0) +
-    ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
-
-  return(p)
+  if(any(!is.na(dataSum$Concentration))){
+    p <- ggplot2::ggplot(dataSum, ggplot2::aes(x=Concentration, y=dataSum[,2])) +
+      ggplot2::geom_bar(stat='identity', color = 'blue', fill=rgb(0.1,0.4,0.5,0.7)) +
+      ggplot2::geom_point(data=data, ggplot2::aes(x=Concentration, y=data[,ncol(data)])) +
+      ggplot2::geom_errorbar(ggplot2::aes(ymin=sdLow, ymax=sdHigh), width = 0.2) +
+      ggplot2::theme_classic() + ggplot2::labs(title=title, x="Concentration", y="log2FoldChange") +
+      ggplot2::geom_hline(yintercept = 0.0) +
+      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
+    
+    return(p)
+  }else{
+    return(NULL)
+  }
 }
 
 #' This method returns a trellis or table of bar chart plots for a set of samples and parameters.
@@ -332,7 +334,6 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 #' @param tMethod the transformation method to export
 #' @return returns a grid of bar charts.
 getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows', tMethod = 'log2Ratio') {
-
   if(length(samples) == 1 && samples == 'all') {
     # get all compound annotations
     samples <- unique(plateSet@plates[[1]]@plateAnnotMap$Compound)

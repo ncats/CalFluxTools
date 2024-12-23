@@ -41,13 +41,13 @@ setClass("aso", slots=list(
   methodParameters = "list",
   outputDirs = "vector",
   pcaResults = "list",
-  rfResults = "list"
+  mlResults = "list"
 ))
 
 
 #' @export
 #' @import caret
-setClass("randomForest", slots=list(
+setClass("MachineLearning", slots=list(
   model = "train",
   predictions = "data.frame",
   prediction_means = "data.frame",

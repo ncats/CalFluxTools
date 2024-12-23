@@ -402,14 +402,16 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #' @export
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
-  vals <- plate@plateData[,parameter]
+  if(parameter %in% colnames(plate@plateData)){
+    vals <- plate@plateData[,parameter]
 
-  for(val in textValues) {
-    numVal = numericValues[i]
-    vals <- gsub(val, numVal, vals)
-
-    plate@plateData[parameter] <- vals
-    i = i + 1
+    for(val in textValues) {
+      numVal = numericValues[i]
+      vals <- gsub(val, numVal, vals)
+      
+      plate@plateData[parameter] <- vals
+      i = i + 1
+    }
   }
 
   return(plate)
@@ -679,8 +681,9 @@ clonePlate <- function(plate) {
 filterParametersOnList <- function(plate, paramsToKeep) {
   df <- plate@plateData
   cnames <- colnames(df)
-  dnames <- setdiff(paramsToKeep, cnames)
-  df <- df[,paramsToKeep]
+  dnames <- intersect(paramsToKeep, cnames)
+  
+  df <- df[,dnames]
 
   plate@plateData <- df
   return(plate)
@@ -697,13 +700,24 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
   params <- colnames(df)
   abbrs <- c()
   for(col in params) {
-    abbr <- abbrInfo[abbrInfo$Statistic == col,2]
-    abbrs <- c(abbrs,abbr)
+    if(col=="well_id"){
+      abbrs <- c(abbrs, "well_id")
+    }else{
+      abbr <- abbrInfo[abbrInfo$Statistic == col,2]
+      abbrs <- c(abbrs,abbr)
+    }
   }
 
   # set abbrs as colnames
   colnames(df) <- abbrs
 
+  ## if(any(is.na(colnames(df)))){
+  ##   drop <- which(is.na(colnames(df)))
+  ##   df <- df[,-drop]
+  ##   params <- params[-drop]
+  ##   abbrs <- abbrs[-drop]
+  ## }
+  
   # rebuild plate info
   plate@parameters <- params
   plate@statList <- params
@@ -719,7 +733,6 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
 #' @param aso the aso object to patch AUC parameter names
 #' @return returns an aso object with the AUC parameter names patched.
 aucParameterPatch <- function(aso) {
-
   # patch plate data
   for(platename in names(aso@plateSet@plates)) {
     i=1
@@ -860,7 +873,7 @@ exportTransformedData <- function(aso) {
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[1],
                                 fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
@@ -868,9 +881,9 @@ exportTransformedData <- function(aso) {
 
 
 #' Exports a colelction of random forest results into one file, along with Benchmark Dose.
-#' @param aso The aso object containing the RandomForest Results
+#' @param aso The aso object containing the MachineLearning Results
 #' @export
-exportRandomForestResults <- function(aso) {
+exportMachineLearningResults <- function(aso) {
 
   fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
                                 fileExtension = "xlsx")
@@ -879,9 +892,9 @@ exportRandomForestResults <- function(aso) {
   bmd <- NULL
   iter = 1
 
-  for(resName in names(aso@rfResults)) {
+  for(resName in names(aso@mlResults)) {
 
-    res <- aso@rfResults[[resName]]@prediction_means
+    res <- aso@mlResults[[resName]]@prediction_means
 
     print(colnames(res))
     resName <- paste0(resName, "_pred_means")
@@ -897,18 +910,18 @@ exportRandomForestResults <- function(aso) {
     iter = iter + 1
   }
 
-  colnames(bmd) <- names(aso@rfResults)
+  colnames(bmd) <- names(aso@mlResults)
   bmdList <- list(bench_mark_dose=bmd)
   predResults <- append(bmdList, predResults)
 
-  for(resName in names(aso@rfResults)) {
-    res <- aso@rfResults[[resName]]@prediction_sds
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@prediction_sds
     resName <- paste0(resName, "_pred_sds")
     predResults[[resName]] <- res
   }
 
-  for(resName in names(aso@rfResults)) {
-    res <- aso@rfResults[[resName]]@predictions
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@predictions
     resName <- paste0(resName, "_pred_full")
     predResults[[resName]] <- res
   }
@@ -937,7 +950,7 @@ getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
 }
 
 
-#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes rfResults slot.
+#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes mlResults slot.
 #' @param aso The aso object containing Random Forest result.
 #' @export
 exportRfPredictionHeatmaps <- function(aso) {
@@ -949,8 +962,8 @@ exportRfPredictionHeatmaps <- function(aso) {
   rfRes = NULL
   timeLabels = c()
   levels = c()
-  for(resName in names(aso@rfResults)) {
-    res <- aso@rfResults[[resName]]@prediction_means
+  for(resName in names(aso@mlResults)) {
+    res <- aso@mlResults[[resName]]@prediction_means
     if(iter == 1) {
       rfRes = res
     } else {

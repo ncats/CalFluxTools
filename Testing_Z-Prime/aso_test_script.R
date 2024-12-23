@@ -25,10 +25,8 @@ library(glmnet)
 
 
 # edit this working directory location for your directory that has the data
-setwd("/Users/danyalepic/Desktop/NIH_VSOAR_2023/aso/Testing_Z-Prime")
-parameterFile30 <-"FLIPR_Analysis_parameters_Run_9.2_BL_30_New_Replacement_Options.xlsx"
-parameterFile60 = "FLIPR_Analysis_parameters_Run_9.2_BL_60_New_Replacement_Options.xlsx"
-parameterFile90 = "FLIPR_Analysis_parameters_Run_9.2_BL_90_New_Replacement_Options.xlsx"
+parameterFile <-"FLIPR_Analysis_parameters_Run_7_New_Replacement_Options.xlsx"
+
 
 # this builds the aso data and exports all the qc files and transformed data
 aso30 <- aso:::runDataProcessing(parameterFile30)
@@ -454,7 +452,8 @@ tableWithAnnotation <- cbind(plateMap, testData)
 
 splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != 'Empty',]
 
-splicedDataClean = splicedData[splicedData$WellType == 'Test',]
+splicedDataClean = splicedData[grepl("Control",splicedData$WellType) &
+                                 splicedData$WellType != "Vehicle Control",]
 
 splicedDataCleanT = t(splicedDataClean) %>% as.data.frame()
 
@@ -464,61 +463,54 @@ splicedDataClean = t(splicedDataCleanT) %>% as.data.frame()
 
 pval_thresh = 0.05
 
-plateMapClean = plateMap[plateMap$Compound != 'Empty' & plateMap$WellType == 'Test',]
+plateMapClean = plateMap[plateMap$Compound != 'Empty' & grepl("Control",plateMap$WellType) & plateMap$WellType != "Vehicle Control",]
 
 aso_concentration_3 = plateMapClean %>% filter(Concentration == 3) %>%
-  dplyr::select(Well) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Well)
 
 aso_concentration_10 = plateMapClean %>% filter(Concentration == 10) %>%
-  dplyr::select(Well) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Well)
 
 aso_concentration_30 = plateMapClean %>% filter(Concentration == 30) %>%
-  dplyr::select(Well) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Well)
 
 aso_concentration_60 = plateMapClean %>% filter(Concentration == 60) %>%
-  dplyr::select(Well) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Well)
 
 aso_compound_3 = plateMapClean %>% filter(Concentration == 3) %>%
-  dplyr::select(Compound) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Compound)
 
 aso_compound_10 = plateMapClean %>% filter(Concentration == 10) %>%
-  dplyr::select(Compound) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Compound)
 
 aso_compound_30 = plateMapClean %>% filter(Concentration == 30) %>%
-  dplyr::select(Compound) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Compound)
 
 aso_compound_60 = plateMapClean %>% filter(Concentration == 60) %>%
-  dplyr::select(Compound) %>%
-  as.matrix() %>% as.vector
+  dplyr::pull(Compound)
 
 #Current problem, column names are not actually the well names
 #Actually fixed this now!
-fit = NULL
-#if(!exists('asoConcLME')){
-  asoConcLME = sapply(c(ncol(plateMap):nrow(splicedDataCleanT)), function(x){
-    df = data.frame(t(splicedDataCleanT[x,c(aso_concentration_3, aso_concentration_10,
-                                            aso_concentration_30, aso_concentration_60)]),
-                    categ = c(aso_compound_3, aso_compound_10, aso_compound_30, aso_compound_60),
-                    status = c(rep('Conc3', length(aso_concentration_3)),
-                               rep('Conc10', length(aso_concentration_10)),
-                               rep('Conc30', length(aso_concentration_30)),
-                               rep('Conc60', length(aso_concentration_60))))
-    colnames(df)[1] = "y"
-    df$y = as.numeric(df$y)
-    fit.null = lmer(y ~ (1|categ), data = df, REML = FALSE)
-    fit = lmer(y ~ status + (1|categ), data = df, REML = FALSE)
-    anovaFit = anova(fit.null, fit)
-    return(fit)
-    #return(anovaFit$'Pr(>Chisq)'[2])
-  })
-#}
+
+## Only use Positive/Negative control samples
+## Original: metabolite level [numeric] ~ mdm2 status [factor] + (1|cell line [factor]). Evaluated for each metabolite
+## Current: Parameter [numeric] ~ ASO [factor] + (1|concentration [factor])
+## Proposed: Positive/Negative outcome [factor] ~ . (all parameters, [numeric]) + (1|concentration [factor]) Trained in controls then predicted on each ASO
+
+df = data.frame(splicedDataCleanT[6:ncol(splicedDataClean),c(aso_concentration_10,
+                                        aso_concentration_30, aso_concentration_60)],
+                categ = c(aso_compound_3, aso_compound_10, aso_compound_30, aso_compound_60),
+                rep('Conc10', length(aso_concentration_10)),
+                rep('Conc30', length(aso_concentration_30)),
+                rep('Conc60', length(aso_concentration_60)))
+colnames(df)[1] = "y"
+df$y = as.numeric(df$y)
+fit.null = lmer(y ~ (1|categ), data = df, REML = FALSE)
+fit = lmer(y ~ status + (1|categ), data = df, REML = FALSE)
+anovaFit = anova(fit.null, fit)
+anovaFit$'Pr(>Chisq)'[2]
+
+
 
 
 
