@@ -402,14 +402,16 @@ platePairMissingDataReport <- function(plateset, platePair, plateSize = 384) {
 #' @export
 encodeDiscreteParameters <- function(plate, parameter, textValues, numericValues) {
   i = 1
-  vals <- plate@plateData[,parameter]
+  if(parameter %in% colnames(plate@plateData)){
+    vals <- plate@plateData[,parameter]
 
-  for(val in textValues) {
-    numVal = numericValues[i]
-    vals <- gsub(val, numVal, vals)
-
-    plate@plateData[parameter] <- vals
-    i = i + 1
+    for(val in textValues) {
+      numVal = numericValues[i]
+      vals <- gsub(val, numVal, vals)
+      
+      plate@plateData[parameter] <- vals
+      i = i + 1
+    }
   }
 
   return(plate)
@@ -679,8 +681,9 @@ clonePlate <- function(plate) {
 filterParametersOnList <- function(plate, paramsToKeep) {
   df <- plate@plateData
   cnames <- colnames(df)
-  dnames <- setdiff(paramsToKeep, cnames)
-  df <- df[,paramsToKeep]
+  dnames <- intersect(paramsToKeep, cnames)
+  
+  df <- df[,dnames]
 
   plate@plateData <- df
   return(plate)
@@ -697,13 +700,24 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
   params <- colnames(df)
   abbrs <- c()
   for(col in params) {
-    abbr <- abbrInfo[abbrInfo$Statistic == col,2]
-    abbrs <- c(abbrs,abbr)
+    if(col=="well_id"){
+      abbrs <- c(abbrs, "well_id")
+    }else{
+      abbr <- abbrInfo[abbrInfo$Statistic == col,2]
+      abbrs <- c(abbrs,abbr)
+    }
   }
 
   # set abbrs as colnames
   colnames(df) <- abbrs
 
+  ## if(any(is.na(colnames(df)))){
+  ##   drop <- which(is.na(colnames(df)))
+  ##   df <- df[,-drop]
+  ##   params <- params[-drop]
+  ##   abbrs <- abbrs[-drop]
+  ## }
+  
   # rebuild plate info
   plate@parameters <- params
   plate@statList <- params
@@ -719,7 +733,6 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
 #' @param aso the aso object to patch AUC parameter names
 #' @return returns an aso object with the AUC parameter names patched.
 aucParameterPatch <- function(aso) {
-
   # patch plate data
   for(platename in names(aso@plateSet@plates)) {
     i=1
@@ -861,7 +874,7 @@ exportTransformedData <- function(aso) {
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[2],
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[1],
                                 fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
