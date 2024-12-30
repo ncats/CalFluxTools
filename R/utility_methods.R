@@ -348,7 +348,6 @@ imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
 #' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
 #' @export
 missingDataReport <- function(plate, plateSize = 384) {
-
   df <- plate@plateData
   if(colnames(df)[1] == "well_id") {
     df <- df[,2:ncol(df)]
@@ -376,6 +375,24 @@ missingDataReport <- function(plate, plateSize = 384) {
   return(res)
 }
 
+#' Calculate parameter coefficient of variation
+#' @param plate ASO plate
+#' @param plateSize plate size, e.g. 384 (default)
+#' @return returns a dataframe with columns 'parameter' and 'CV'
+#' @export
+calculateParamCV <- function(plate, plateSize = 384) {
+  df <- plate@plateData
+  if(colnames(df)[1] == "well_id") {
+    df <- df[,2:ncol(df)]
+  }
+  paramCV <- apply(df, 2, function(x){
+    filtered <- x[which(x != "Blank" & x != "N/A" & x != "Masked")]
+    filtered <- as.numeric(filtered)
+    CV <- sd(filtered) / mean(filtered) * 100
+  })
+  res <- data.frame(Parameter = names(paramCV), CV = paramCV)
+  return(res)
+}
 
 #' platePairMissingDataReport
 #'

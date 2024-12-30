@@ -497,6 +497,11 @@ assessDataCompleteness <- function(aso) {
 
     colnames(missingValReport)[1] <- "Param_Name"
     colnames(missingValReport)[2] <- "Parameter"
+
+    ## Adding a step for filtering by coefficient of variation
+    paramCV <- calculateParamCV(plate = plate, plateSize = plate@format)
+    missingValReport <- missingValReport %>% dplyr::left_join(paramCV, by = "Parameter")
+  
     dataCoverage[[platename]] <- missingValReport
   }
 
@@ -511,15 +516,14 @@ assessDataCompleteness <- function(aso) {
 #' @returns returns the aso object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
 applyDataCoverageFilters <- function(aso) {
   # for each plate loop over paramters to check their coverage and apply limits
-
   # get lower coverage limit for each parameter
-  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT")]
+  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT", "Max_CV")]
 
   # pSize (plate size) has to be reduced to the number of non-empty wells.
   pSize <- aso@plateSet@dataCoverageTables[[1]]$Keeper_Wells[1]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT / 100.0) * pSize)
 
-  pInfo <- pInfo[,c(2,ncol(pInfo))]
+  pInfo <- pInfo[,c("Suggested_Abbreviation","Max_CV","max_data_loss")]
 
   plateSet <- aso@plateSet
   dataCoverage <- plateSet@dataCoverageTables
@@ -529,6 +533,7 @@ applyDataCoverageFilters <- function(aso) {
     dcov <- merge(dcov, pInfo, by.x = "Parameter", by.y = "Suggested_Abbreviation", sort = F)
     dcov$keep <- T
     dcov$keep[dcov$Missing_Count > dcov$max_data_loss] <- F
+    dcov$keep[dcov$CV > dcov$Max_CV] <- F
 
     if ("Statistic" %in% colnames(dcov)) {
       dcov <- subset(dcov, select = c(-Statistic))
