@@ -1,34 +1,33 @@
 # The analysis.R file contains the high level method that makes calls on other methods for
-# processing data and providing QC analyses. The buildAndProcessASOs() method sequentially calls
-# methods that process ASO data according to an input file that specifies all methods.
+# processing data and providing QC analyses. The buildAndProcessFLIPRDatas() method sequentially calls
+# methods that process FLIPRData data according to an input file that specifies all methods.
 
 
-#' This method is a convenience method that displays a file chooser for selecting an ASO Paramter Excel file for processing.
+#' This method is a convenience method that displays a file chooser for selecting a FLIPRData Paramter Excel file for processing.
 #' The method will run data procesing and output diagnostic plots and tables.
-#' @returns Returns an aso object containing analysis parameters from the parameter file, input, refined and transformed plate data.
+#' @returns Returns a FLIPRData object containing analysis parameters from the parameter file, input, refined and transformed plate data.
 #' @export
 processData <- function() {
   file <- file.choose()
-  aso:::buildAndProcessASO(file)
+  FLIPRTools:::processFLIPRData(file)
 }
 
 #' Wrapper method to process a data set possibly containing multiple file paires
-#' processes data, writes file outputs, returns an ASO object with processed data.
-#' @param asoParameterXlsxFilePath file path to param file
-#' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
-#' @returns processed ASO object
+#' processes data, writes file outputs, returns a FLIPRData object with processed data.
+#' @param FLIPRDataParameterXlsxFilePath file path to param file
+#' @returns processed FLIPRData object
 #' @export
-processAsoData <- function(asoParameterXlsxFilePath, paired_analysis = TRUE) {
-  aso:::initializeLog(logLevel = "TRACE")
+processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
+  FLIPRTools:::initializeLog(logLevel = "TRACE")
 
-  logger::log_info(paste0("Reading input parameter excel file ===> ", asoParameterXlsxFilePath))
-  # parse parameter and analysis settings, builds initial aso object.
-  aso <- aso:::readAsoParameterFile(asoParameterXlsxFilePath)
+  logger::log_info(paste0("Reading input parameter excel file ===> ", FLIPRDataParameterXlsxFilePath))
+  # parse parameter and analysis settings, builds initial FLIPRData object.
+  FLIPRData <- FLIPRTools:::readFLIPRDataParameterFile(FLIPRDataParameterXlsxFilePath)
   logger::log_success("Finished reading input parameter excel file")
 
   # set the root dir as the working directory
   origDir <- getwd()
-  rootDir <- aso@methodParameters[["root_dir"]]
+  rootDir <- FLIPRData@methodParameters[["root_dir"]]
 
   logger::log_info(paste0("Working directory ==> ", rootDir))
   setwd(paste0(rootDir))
@@ -36,27 +35,28 @@ processAsoData <- function(asoParameterXlsxFilePath, paired_analysis = TRUE) {
   logger::log_info("Loading plate data")
   # loads the list of plate files specified in the parameter file and create file pairs
   # creating a plate set
-  aso <- aso:::loadPlates(aso)
+  FLIPRData <- FLIPRTools:::loadPlates(FLIPRData)
   logger::log_success("Finished loading plate data")
 
   logger::log_info("Loading plate map well annotations")
-  aso <- aso:::loadPlateMaps(aso)
+  FLIPRData <- FLIPRTools:::loadPlateMaps(FLIPRData)
   logger::log_success("Finished loading plate map well annotations")
 
-  # the aso has all plate pairs specified
+  # the FLIPRData has all plate pairs specified
   # loop through all plate pairs in the plate set.
-  numberOfPlates <- length(aso@plateSet@plates)
+  numberOfPlates <- length(FLIPRData@plateSet@plates)
   logger::log_info(paste0("Number of plate pairs to process: ", numberOfPlates / 2))
 
   logger::log_info("Initialize export directory...")
-  outDir <- aso:::initializedExportLocation(aso)
+  outDir <- FLIPRTools:::initializedExportLocation(FLIPRData)
   logger::log_success(paste0("Initialized export directory... ", outDir))
 
   platePairIndex <- 1
+  paired_analysis <- FLIPRData@methodParameters$analysis_params$Paired_Analysis == "TRUE"
   for (i in 1:numberOfPlates) {
     if (i %% 2 == 1 | !paired_analysis) {
       # set the ouput dir
-      currentOutDir <- paste0(outDir, "/", aso@outputDirs[[i]])
+      currentOutDir <- paste0(outDir, "/", FLIPRData@outputDirs[[i]])
       if (!dir.exists(currentOutDir)) {
         dir.create(currentOutDir)
       }
@@ -67,57 +67,61 @@ processAsoData <- function(asoParameterXlsxFilePath, paired_analysis = TRUE) {
       logger::log_info("###############")
       logger::log_info(paste0("Processing plate pair: ", platePairIndex))
       logger::log_info(paste0("Output directory: ", currentOutDir))
+      newFLIPRData <- FLIPRData
+      newFLIPRData@pcaResults <- list()
+      newFLIPRData@mlResults <- list()
+      # assign(x="newFLIPRData", value=FLIPRData)
 
-      newASO <- aso
-      # assign(x="newASO", value=aso)
-
-      # check to see if we have a copy of our aso object
-      # print("Don't have ASO copy????")
-      # if(tracemem(newASO) == tracemem(aso)) {
-      #   print("Same ASO")
-      #   print(tracemem(newASO))
-      #   print(tracemem(aso))
+      # check to see if we have a copy of our FLIPRData object
+      # print("Don't have FLIPRData copy????")
+      # if(tracemem(newFLIPRData) == tracemem(FLIPRData)) {
+      #   print("Same FLIPRData")
+      #   print(tracemem(newFLIPRData))
+      #   print(tracemem(FLIPRData))
       # } else {
-      #   print("Different ASO")
+      #   print("Different FLIPRData")
       # }
       if (paired_analysis) {
         keepers <- c(i, i + 1)
       } else {
         keepers <- i
       }
-      newPlateSet <- subsetPlateSet(newASO@plateSet, plateIndicesToKeep = keepers)
-      newASO@plateSet <- newPlateSet
+      newPlateSet <- subsetPlateSet(newFLIPRData@plateSet, plateIndicesToKeep = keepers)
 
-      # print("aso and newASO plate count")
-      # print(length(aso@plateSet@plates))
-      # print(length(newASO@plateSet@plates))
+      newFLIPRData@plateSet <- newPlateSet
+
+      # print("FLIPRData and newFLIPRData plate count")
+      # print(length(FLIPRData@plateSet@plates))
+      # print(length(newFLIPRData@plateSet@plates))
       #
       # print("plate names for this iteration:")
-      # print(newASO@plateSet@plateNames)
+      # print(newFLIPRData@plateSet@plateNames)
 
       # print("number of transformed data frames and t names")
-      # print(length(aso@plateSet@transformedPlateData))
-      # print(length(aso@plateSet@transformationNames))
+      # print(length(FLIPRData@plateSet@transformedPlateData))
+      # print(length(FLIPRData@plateSet@transformationNames))
       #
       #       print("Running a processing iteration, iter = plate read count...")
       #       print(i)
-      #       print(length(newASO@plateSet@plates))
+      #       print(length(newFLIPRData@plateSet@plates))
+      newFLIPRData <- runDataProcessing(newFLIPRData, paired_analysis)
 
-      newASO <- runDataProcessing(newASO, paired_analysis)
-
-      # capture the transformed plate data
-      aso@plateSet@transformedPlateData[[names(aso@plateSet@plates)[i + 1]]] <- newASO@plateSet@transformedPlateData[[1]]
+      # Preserve the original transformation label from the processed pair so
+      # later analyses can distinguish timepoints correctly in the full object.
+      for (tfName in names(newFLIPRData@plateSet@transformedPlateData)) {
+        FLIPRData@plateSet@transformedPlateData[[tfName]] <- newFLIPRData@plateSet@transformedPlateData[[tfName]]
+      }
 
       # collect PCA Result
-      pcaResultList <- newASO@pcaResults
+      pcaResultList <- newFLIPRData@pcaResults
       for (id in names(pcaResultList)) {
-        aso@pcaResults[[id]] <- pcaResultList[[id]]
+        FLIPRData@pcaResults[[id]] <- pcaResultList[[id]]
       }
 
       # collect Random Forest Result
-      rfResultList <- newASO@mlResults
+      rfResultList <- newFLIPRData@mlResults
       for (id in names(rfResultList)) {
-        aso@mlResults[[id]] <- rfResultList[[id]]
+        FLIPRData@mlResults[[id]] <- rfResultList[[id]]
       }
 
       platePairIndex <- platePairIndex + 1
@@ -126,34 +130,34 @@ processAsoData <- function(asoParameterXlsxFilePath, paired_analysis = TRUE) {
 
   setwd("..")
 
-  aso:::exportMachineLearningResults(aso)
-  aso:::exportRfPredictionHeatmaps(aso)
+  FLIPRTools:::exportMachineLearningResults(FLIPRData)
+  FLIPRTools:::exportRfPredictionHeatmaps(FLIPRData)
 
   setwd(origDir)
 
   # stop pointing to this analysis log
-  aso:::idleLog()
+  FLIPRTools:::idleLog()
 
-  return(aso)
+  return(FLIPRData)
 }
 
-#' This method is a wrapper method that performs all data processing operations according to the supplied ASO Parameter File.
+#' This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
 #' The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.
-#' @param asoParamterXlsxFilePath a file path and file name for the ASO parameter xlsx file. All information required to process aso data is contained in this file.
+#' @param FLIPRDataParamterXlsxFilePath a file path and file name for the FLIPRData parameter xlsx file. All information required to process FLIPRData data is contained in this file.
 #' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
-#' @returns Returns an aso objecdt with loaded and transformed data. During processing several output summary files will be exported.
+#' @returns Returns a FLIPRData objecdt with loaded and transformed data. During processing several output summary files will be exported.
 #' @export
-runDataProcessing <- function(aso, paired_analysis) {
+runDataProcessing <- function(FLIPRData, paired_analysis) {
   logger::log_info("Starting Data Processing and Analysis methods")
 
   # AUC parameter names in the plate data file tend to have Japanese Kanji encoded as unicode.
   # This method replaces those parameter names with a standardized text, just a patch
-  aso <- aso:::aucParameterPatch(aso)
+  FLIPRData <- FLIPRTools:::aucParameterPatch(FLIPRData)
 
   logger::log_info("Masking empty and masked wells.")
   # this method uses well annotations from the plate map to convert data from 'empty' wells
   # or wells that shouldn't be use, from numeric values to NaN (not-a-number values)
-  aso <- aso:::maskEmptyWells(aso)
+  FLIPRData <- FLIPRTools:::maskEmptyWells(FLIPRData)
   logger::log_success("Masked empty and masked wells.")
 
   logger::log_info("Filtering to selected parameters")
@@ -161,23 +165,23 @@ runDataProcessing <- function(aso, paired_analysis) {
   # this method removes data for parameters that should not be used (based on the parameter file)
   # only the key parameter's data will move on.
   logger::log_info("Selected parameters:")
-  ## aso <- aso:::filterToSelectedParameters(aso)
+  ## FLIPRData <- FLIPRTools:::filterToSelectedParameters(FLIPRData)
   logger::log_success("Filtered to selected parameters.")
   # Users can specify a short abbreviation to replace the full parameter names.
   # The parameter file can hold these abbreviations and set these abbreviations to be used in output instead of the longer parameter names.
-  aso <- aso:::setParameterAbbreviaions(aso)
+  FLIPRData <- FLIPRTools:::setParameterAbbreviations(FLIPRData)
 
   # apply value imputations and make categorical results numeric - if specified
   # some parameters don't have numeric values, but rather text values that describe the parameter.
   # this step will optionally apply a mapping or conversion from text values to discrete numeric values.
-  aso <- aso:::applyCategoricalToNumeric(aso)
+  FLIPRData <- FLIPRTools:::applyCategoricalToNumeric(FLIPRData)
   
   print("completeness")
 
   logger::log_info("QC for data completeness.")
   # assess data completeness for each parameter. This holds information on how many plate values
   # are empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
-  aso <- aso:::assessDataCompleteness(aso)
+  FLIPRData <- FLIPRTools:::assessDataCompleteness(FLIPRData)
   logger::log_success("Finished QC for data completeness.")
 
 
@@ -188,14 +192,14 @@ runDataProcessing <- function(aso, paired_analysis) {
   # the parameter file will specify how complete a parameter's data has to be in order to keep that parameter in the dataset.
   # if a given parameter has very sparse data, it may be best to exclude that parameter for downstream analysis.
   # A user threshold determines how much missing data can be tolerated.
-  aso <- aso:::applyDataCoverageFilters(aso)
+  FLIPRData <- FLIPRTools:::applyDataCoverageFilters(FLIPRData)
   logger::log_success("Finished applying data coverage filters")
 
   print("export completeness filter")
 
   # export of the data coverage tables
   # this method will create an excel file that provides information on the data coverage assessment.
-  aso:::exportDataCoverageReport(aso)
+  FLIPRTools:::exportDataCoverageReport(FLIPRData)
 
   print("impute")
 
@@ -205,17 +209,17 @@ runDataProcessing <- function(aso, paired_analysis) {
   # some parameters can have values of 'N/A' or 'Blank'.
   # The lab has asked for a way to replace these values. The drop-in value or techinque for replacement is specified in the paramter input file.
   # replacement of these values is optional for each parameter.
-  aso <- aso:::replaceBlanksAndNAValues(aso)
+  FLIPRData <- FLIPRTools:::replaceBlanksAndNAValues(FLIPRData)
   logger::log_success("Finished imputing/replacing blanks and NAs")
 
 
   print("harmonize")
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
-  # the experiments compare an ASO treatment plate read (plate data set) to an untreated (time=0) control plate read.
+  # the experiments compare a FLIPRData treatment plate read (plate data set) to an untreated (time=0) control plate read.
   # This method makes sure that after possibly filtering  out parameters, plate data sets (T=0 and experimental plate read)
   # both have the same parameters reported, in commmon.
-  aso <- aso:::harmonizeParameters(aso)
+  FLIPRData <- FLIPRTools:::harmonizeParameters(FLIPRData)
 
   print("BL QA")
 
@@ -223,13 +227,13 @@ runDataProcessing <- function(aso, paired_analysis) {
   # This method runs Quality Control checks on the reference plate data (T=0 plate)
   # This will report on things like parameter variability, and wells that tend to be outliers, perahps having bad data (a bad well)
   if (paired_analysis) {
-    aso <- aso:::runQcForReferencePlate(aso)
+    FLIPRData <- FLIPRTools:::runQcForReferencePlate(FLIPRData)
     logger::log_success("Finished reference baseline QA")
   }
 
   # now impute existing missing data as specified in input parameters
   # for now, drop standard impute function
-  # aso <- aso:::imputeData(aso)
+  # FLIPRData <- FLIPRTools:::imputeData(FLIPRData)
 
   print("transform")
 
@@ -239,158 +243,157 @@ runDataProcessing <- function(aso, paired_analysis) {
   # This produces a new data frame/table that will report on the effect of treatment.
   # Currently we report the log2(experimental_condition_value/control_value), a log base 2 fold change.
 
-  aso <- aso:::transformData(aso, paired_analysis)
+  FLIPRData <- FLIPRTools:::transformData(FLIPRData, paired_analysis)
   print("export plate views")
 
   # create optional plate view pdf.
   # this will show plate views for each paramter, in plate-format.
   # These can reveal wells that tend to be outliers.
   if (paired_analysis) {
-    aso:::exportPlateViews(aso)
+    FLIPRTools:::exportPlateViews(FLIPRData)
   }
 
   print("export transformed data")
-  aso:::exportTransformedData(aso)
+  FLIPRTools:::exportTransformedData(FLIPRData)
   print("export bar charts")
   # create optional bar-chart
   # This exports the log2FoldChange (treatment effect) as bar charts.
-  # Barcharts show treatment effect on the y-axis, and ASO concentration on the x-axis.
-  aso:::exportBarCharts(aso)
+  # Barcharts show treatment effect on the y-axis, and FLIPRData concentration on the x-axis.
+  FLIPRTools:::exportBarCharts(FLIPRData)
 
   print("ttest")
 
   if (paired_analysis) {
     # this runs a paired t-test to report on which wells show different values after treatment, for each parameter.
-    # The method stores the result in an aso object.
-    ttDf <- aso:::runPairedTTest(aso)
+    # The method stores the result in a FLIPRData object.
+    ttDf <- FLIPRTools:::runPairedTTest(FLIPRData)
 
     # exports the paired t-test results.
-    aso:::exportPairedTTestResult(aso, ttDf, "file")
+    FLIPRTools:::exportPairedTTestResult(FLIPRData, ttDf, "file")
   } else {
-    runTTest(aso)
+    runTTest(FLIPRData)
   }
 
   print("z prime")
 
   logger::log_info("Starting z-prime factor analysis of controls")
 
-  aso:::zFactorXlsx(aso)
+  FLIPRTools:::zFactorXlsx(FLIPRData)
 
   logger::log_success("Finished z-prime factor analysis of controls")
-
-  fullPCA <- aso:::runPCA(aso, dataType = "transformed")
-  controlPCA <- aso:::runPCA(aso, dataType = "controls")
+  fullPCA <- FLIPRTools:::runPCA(FLIPRData, dataType = "transformed")
+  controlPCA <- FLIPRTools:::runPCA(FLIPRData, dataType = "controls")
 
   # capture PCA results
-  plateReadName <- aso@plateSet@plateNames[2]
+  plateReadName <- FLIPRData@plateSet@plateNames[2]
   pcaResult <- new("pcaResult")
   pcaResult@allWellsPCA <- fullPCA
   pcaResult@controlWellsPCA <- controlPCA
-  aso@pcaResults[[plateReadName]] <- pcaResult
+  FLIPRData@pcaResults[[plateReadName]] <- pcaResult
 
-  aso:::plotPCA(aso = aso, pcaList = fullPCA, pcaType = 1, dataName = "all_wells")
-  aso:::plotPCA(aso = aso, pcaList = controlPCA, pcaType = 1, dataName = "control_wells")
-  aso:::plotPCA(aso = aso, pcaList = fullPCA, pcaType = 2, dataName = "parameters_all_wells")
-  aso:::plotPCA(aso = aso, pcaList = controlPCA, pcaType = 2, dataName = "parameters_control_wells")
+  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = fullPCA, pcaType = 1, dataName = "all_wells")
+  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = controlPCA, pcaType = 1, dataName = "control_wells")
+  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = fullPCA, pcaType = 2, dataName = "parameters_all_wells")
+  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = controlPCA, pcaType = 2, dataName = "parameters_control_wells")
 
   print("start random forest")
   # run random forest
-  aso <- aso:::asoMachineLearning(aso)
+  FLIPRData <- FLIPRTools:::FLIPRDataMachineLearning(FLIPRData)
 
   print("Analyis Done")
 
-  # returns the aso data object
-  return(aso)
+  # returns the FLIPRData data object
+  return(FLIPRData)
 }
 
 
-#' This method loads plate data according the the plate files specified within the ASO parameter file.
-#' One plate object is created for each input plate file and the plate pairs are stored within the returned ASO object.
-#' @param aso the input ASO file generated by readAsoParameterFile
-#' @returns returns an aso object containing a plateset object with loaded plate data.
-loadPlates <- function(aso) {
-  fileList <- aso@methodParameters[["plate_file_list"]]
+#' This method loads plate data according the the plate files specified within the FLIPRData parameter file.
+#' One plate object is created for each input plate file and the plate pairs are stored within the returned FLIPRData object.
+#' @param FLIPRData the input FLIPRData file generated by readFLIPRDataParameterFile
+#' @returns returns a FLIPRData object containing a plateset object with loaded plate data.
+loadPlates <- function(FLIPRData) {
+  fileList <- FLIPRData@methodParameters[["plate_file_list"]]
   plateSet <- new("plateset")
   plates <- list()
-  dir <- aso@methodParameters[["root_dir"]]
+  dir <- FLIPRData@methodParameters[["root_dir"]]
 
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
-    plate <- aso::read_stemonix_data(filename = paste0(dir, file))
-    plateSet <- aso::addPlate(plateSet, plate, platename)
+    plate <- read_stemonix_data(filename = paste0(dir, file))
+    plateSet <- addPlate(plateSet, plate, platename)
   }
-  # add the plateset
-  aso@plateSet <- plateSet
-  return(aso)
+  ## add the plateset
+  FLIPRData@plateSet <- plateSet
+  return(FLIPRData)
 }
 
-#' This function loads plate annotations, plate maps as specified in the aso object after initializing with parameter file
-#' @param aso the input ASO file generated by readAsoParameterFile
-#' @returns returns an aso object containing a plateset object with loaded plate data and plate map annotations.
-loadPlateMaps <- function(aso) {
-  if (is.null(aso)) {
-    print("Null aso object. Please use readAsoParameterFile() to initialize the aso file prior to loadPlateMaps()")
+#' This function loads plate annotations, plate maps as specified in the FLIPRData object after initializing with parameter file
+#' @param FLIPRData the input FLIPRData file generated by readFLIPRDataParameterFile
+#' @returns returns a FLIPRData object containing a plateset object with loaded plate data and plate map annotations.
+loadPlateMaps <- function(FLIPRData) {
+  if (is.null(FLIPRData)) {
+    print("Null FLIPRData object. Please use readFLIPRDataParameterFile() to initialize the FLIPRData file prior to loadPlateMaps()")
     return()
   }
 
-  fileList <- aso@methodParameters[["plate_map_list"]]
-  dir <- aso@methodParameters[["root_dir"]]
+  fileList <- FLIPRData@methodParameters[["plate_map_list"]]
+  dir <- FLIPRData@methodParameters[["root_dir"]]
 
   if (is.null(fileList) || is.null(dir)) {
     print("Null root directory or plate file list in paramters.
     Please check the parameters file for the root directory and plate list information.
-    Then reload the updated parameter file using readAsoParameterFile(aso) function.")
-    return(aso)
+    Then reload the updated parameter file using readFLIPRDataParameterFile(FLIPRData) function.")
+    return(FLIPRData)
   }
 
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
-    plate <- aso@plateSet@plates[[platename]]
-    plate <- aso:::read_stemonix_metadata(paste0(dir, file), plate)
-    aso@plateSet@plates[[platename]] <- plate
+    plate <- FLIPRData@plateSet@plates[[platename]]
+    plate <- FLIPRTools:::read_stemonix_metadata(paste0(dir, file), plate)
+    FLIPRData@plateSet@plates[[platename]] <- plate
   }
 
-  return(aso)
+  return(FLIPRData)
 }
 
 
 #' Method updates parameter abbreviations to those specified in the parameter file
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object with parameter abbreviations set to use for all downstream reports.
-setParameterAbbreviaions <- function(aso) {
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object with parameter abbreviations set to use for all downstream reports.
+setParameterAbbreviations <- function(FLIPRData) {
   keyCols <- c("Statistic", "Suggested_Abbreviation")
 
-  if (!all(keyCols %in% colnames(aso@parameterInfo))) {
+  if (!all(keyCols %in% colnames(FLIPRData@parameterInfo))) {
     print("Parameter information doesn't have key column names 'Statistic' and 'Suggested_Abbreviation'.
           Please update the parameter file to include these columns.
           Note that column names need to match these names exactly, including case.")
   }
 
-  abbrInfo <- aso@parameterInfo[, keyCols]
+  abbrInfo <- FLIPRData@parameterInfo[, keyCols]
 
-  for (platename in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[platename]]
+  for (platename in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[platename]]
     plate <- applyParameterAbbreviations(plate, abbrInfo)
-    aso@plateSet@plates[[platename]] <- plate
+    FLIPRData@plateSet@plates[[platename]] <- plate
 
   }
-  return(aso)
+  return(FLIPRData)
 }
 
 
 ####################
 #####
-##### high level methods working on the ASO object
+##### high level methods working on the FLIPRData object
 #####
 ####################
 
 #' Converts well vales to NaN for wells that are annotated in the platemap as "Empty".
 #' Downstream methods will not be impacted by these well values.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object with specified wells masked.
-maskEmptyWells <- function(aso) {
-  for (plateName in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[plateName]]
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object with specified wells masked.
+maskEmptyWells <- function(FLIPRData) {
+  for (plateName in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[plateName]]
     plateMap <- plate@plateAnnotMap
     df <- plate@plateData
 
@@ -401,38 +404,38 @@ maskEmptyWells <- function(aso) {
     df[plateMap$Mask == 1, ] <- "Masked"
 
     plate@plateData <- df
-    aso@plateSet@plates[[plateName]] <- plate
+    FLIPRData@plateSet@plates[[plateName]] <- plate
   }
 
-  return(aso)
+  return(FLIPRData)
 }
 
 #' Reduces the plate data object to only contain data for the subset of selected parameters.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object with working set of plate data reduced to parameters specified in the parameter file.
-filterToSelectedParameters <- function(aso) {
-  pInfo <- aso@parameterInfo
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object with working set of plate data reduced to parameters specified in the parameter file.
+filterToSelectedParameters <- function(FLIPRData) {
+  pInfo <- FLIPRData@parameterInfo
   paramsToKeep <- unlist(pInfo$Statistic[pInfo$Use == 1])
 
-  for (platename in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[platename]]
+  for (platename in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[platename]]
     plate <- filterParametersOnList(plate, paramsToKeep)
-    aso@plateSet@plates[[platename]] <- plate
+    FLIPRData@plateSet@plates[[platename]] <- plate
   }
-  return(aso)
+  return(FLIPRData)
 }
 
 
 #' Converts categorical data to numeric values according to specified rules in the input parameter file.
 #' Note that this method will only run on parameters that are flagged as having categorical data.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
-applyCategoricalToNumeric <- function(aso) {
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
+applyCategoricalToNumeric <- function(FLIPRData) {
   # get parameters to convert
-  paramsToMap <- aso@parameterInfo[!is.na(aso@parameterInfo$cat_to_num_map), ]
+  paramsToMap <- FLIPRData@parameterInfo[!is.na(FLIPRData@parameterInfo$cat_to_num_map), ]
 
-  for (platename in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[platename]]
+  for (platename in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[platename]]
 
     for (i in 1:nrow(paramsToMap)) {
       abbrParam <- paramsToMap[i, 2]
@@ -450,18 +453,18 @@ applyCategoricalToNumeric <- function(aso) {
       }
       vals <- as.numeric(vals)
 
-      plate <- aso::encodeDiscreteParameters(plate, abbrParam, keys, vals)
-      aso@plateSet@plates[[platename]] <- plate
+      plate <- encodeDiscreteParameters(plate, abbrParam, keys, vals)
+      FLIPRData@plateSet@plates[[platename]] <- plate
     }
   }
-  return(aso)
+  return(FLIPRData)
 }
 
 #' Replaces 'Blank' or Empty data and N/A data for each parameter according to specified rules for each parameter.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
-replaceBlanksAndNAValues <- function(aso) {
-  paramInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, ]
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
+replaceBlanksAndNAValues <- function(FLIPRData) {
+  paramInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, ]
   naParams <- paramInfo[paramInfo$NA_Replace != "N", ]
   naParamList <- naParams$NA_Replace
   names(naParamList) <- naParams$Suggested_Abbreviation
@@ -470,21 +473,21 @@ replaceBlanksAndNAValues <- function(aso) {
   blankParamList <- blankParams$Blank_Replace
   names(blankParamList) <- blankParams$Suggested_Abbreviation
 
-  refinedPlateSet <- replaceBlanksAndNAs(aso@plateSet, blankParamList, naParamList)
-  aso@plateSet <- refinedPlateSet
+  refinedPlateSet <- replaceBlanksAndNAs(FLIPRData@plateSet, blankParamList, naParamList)
+  FLIPRData@plateSet <- refinedPlateSet
 
-  return(aso)
+  return(FLIPRData)
 }
 
-#' Runs an analysis on the aso object to report on data coverage for each parameter.
-#' The missing data report is entered into the aso object.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object containing the missing data report in the dataCoverageTables slot
-assessDataCompleteness <- function(aso) {
+#' Runs an analysis on the FLIPRData object to report on data coverage for each parameter.
+#' The missing data report is entered into the FLIPRData object.
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object containing the missing data report in the dataCoverageTables slot
+assessDataCompleteness <- function(FLIPRData) {
   dataCoverage <- list()
 
-  plates <- aso@plateSet@plates
-  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c(1, 2)]
+  plates <- FLIPRData@plateSet@plates
+  pInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, c(1, 2)]
 
   for (platename in names(plates)) {
     plate <- plates[[platename]]
@@ -505,27 +508,27 @@ assessDataCompleteness <- function(aso) {
     dataCoverage[[platename]] <- missingValReport
   }
 
-  aso@plateSet@dataCoverageTables <- dataCoverage
+  FLIPRData@plateSet@dataCoverageTables <- dataCoverage
 
-  return(aso)
+  return(FLIPRData)
 }
 
 
 #' This method optionally removes parameters that have a large amount of missing data, beyond specified levels.
-#' @param aso aso object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the aso object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
-applyDataCoverageFilters <- function(aso) {
+#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the FLIPRData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
+applyDataCoverageFilters <- function(FLIPRData) {
   # for each plate loop over paramters to check their coverage and apply limits
   # get lower coverage limit for each parameter
-  pInfo <- aso@parameterInfo[aso@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT", "Max_CV")]
+  pInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT", "Max_CV")]
 
   # pSize (plate size) has to be reduced to the number of non-empty wells.
-  pSize <- aso@plateSet@dataCoverageTables[[1]]$Keeper_Wells[1]
+  pSize <- FLIPRData@plateSet@dataCoverageTables[[1]]$Keeper_Wells[1]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT / 100.0) * pSize)
 
   pInfo <- pInfo[,c("Suggested_Abbreviation","Max_CV","max_data_loss")]
 
-  plateSet <- aso@plateSet
+  plateSet <- FLIPRData@plateSet
   dataCoverage <- plateSet@dataCoverageTables
 
   for (n in names(dataCoverage)) {
@@ -541,10 +544,10 @@ applyDataCoverageFilters <- function(aso) {
     dataCoverage[[n]] <- dcov
   }
 
-  aso@plateSet@dataCoverageTables <- dataCoverage
+  FLIPRData@plateSet@dataCoverageTables <- dataCoverage
 
-  plates <- aso@plateSet@plates
-  dataCoverage <- aso@plateSet@dataCoverageTables
+  plates <- FLIPRData@plateSet@plates
+  dataCoverage <- FLIPRData@plateSet@dataCoverageTables
   for (platename in names(plates)) {
     plate <- plates[[platename]]
     dcov <- dataCoverage[[platename]]
@@ -555,64 +558,64 @@ applyDataCoverageFilters <- function(aso) {
     plates[[platename]] <- plate
   }
 
-  aso@plateSet@plates <- plates
+  FLIPRData@plateSet@plates <- plates
 
-  return(aso)
+  return(FLIPRData)
 }
 
 
 #' Exports the data coverage report that lists parameters and information on missing data.
-#' @param aso the aso object containing pre-computed data coverage results
-exportDataCoverageReport <- function(aso) {
-  rootDir <- aso@methodParameters[["root_dir"]]
+#' @param FLIPRData the FLIPRData object containing pre-computed data coverage results
+exportDataCoverageReport <- function(FLIPRData) {
+  rootDir <- FLIPRData@methodParameters[["root_dir"]]
   fileName <- constructFileName(
     baseFileName = "Plate_Read_Data_Coverage",
-    plateReadLabel = aso@plateSet@plateNames[1],
+    plateReadLabel = FLIPRData@plateSet@plateNames[1],
     fileExtension = "xlsx"
   )
 
-  tabs <- aso@plateSet@dataCoverageTables
+  tabs <- FLIPRData@plateSet@dataCoverageTables
   # openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
   openxlsx::write.xlsx(tabs, file = fileName)
 }
 
 #' Makes sure that the reference plate read and the treatment plate read have the same parameters
 #' after possibly filtering based on data loss.
-#' @param aso the aso object having plate read pairs for comparison
-harmonizeParameters <- function(aso) {
-  aso@plateSet <- harmonizeParametersAcrossPlates(aso@plateSet)
-  return(aso)
+#' @param FLIPRData the FLIPRData object having plate read pairs for comparison
+harmonizeParameters <- function(FLIPRData) {
+  FLIPRData@plateSet <- harmonizeParametersAcrossPlates(FLIPRData@plateSet)
+  return(FLIPRData)
 }
 
 #' Runs quality control on the reference (control) plate read, prior to treatment.
 #' This collects information on parameter variation (standard deviation, and coefficient of variation)
 #' and z-scores for each parameter and each well help to identy outlier/bad wells that we might want to 'mask'
-#' @param aso the aso object having a platepair object with a loaded reference plate
-runQcForReferencePlate <- function(aso) {
-  runReferenceQC(aso@plateSet, aso@methodParameters$root_dir, aso@methodParameters$plate_file_list[[1]])
-  return(aso)
+#' @param FLIPRData the FLIPRData object having a platepair object with a loaded reference plate
+runQcForReferencePlate <- function(FLIPRData) {
+  runReferenceQC(FLIPRData@plateSet, FLIPRData@methodParameters$root_dir, FLIPRData@methodParameters$plate_file_list[[1]])
+  return(FLIPRData)
 }
 
 #' Performs missing data imputation, replacing missing data according to a supplied method name.
 #' Note that this method is not currently used in typical pre-processing.
-#' @param aso an aso object that has a platepair and processing parameters
-#' @return the aso object now having missing values imputed
-imputeData <- function(aso) {
-  params <- aso@methodParameters$analysis_params
+#' @param FLIPRData a FLIPRData object that has a platepair and processing parameters
+#' @return the FLIPRData object now having missing values imputed
+imputeData <- function(FLIPRData) {
+  params <- FLIPRData@methodParameters$analysis_params
   impMethod <- params[["Imputation_Method"]]
   if (impMethod == "per_param_pct_min") {
     fractionMin <- as.numeric(params[["Imputation_Fraction_Min"]])
-    imputeCols <- aso:::getColumnAbbrToImpute(aso)
-    aso@plateSet <- aso:::imputePercentMin(aso@plateSet, pctMin = fractionMin, imputeCols)
+    imputeCols <- FLIPRTools:::getColumnAbbrToImpute(FLIPRData)
+    FLIPRData@plateSet <- FLIPRTools:::imputePercentMin(FLIPRData@plateSet, pctMin = fractionMin, imputeCols)
   }
-  return(aso)
+  return(FLIPRData)
 }
 
 #' helper function to determine which parameters should undergo imputation.
-#' @param aso an aso object having plate data loaded ans parameters to control the imputation process
+#' @param FLIPRData a FLIPRData object having plate data loaded ans parameters to control the imputation process
 #' @return a list object with two fields incicating which columns to impute for zeros or NAs,
-getColumnAbbrToImpute <- function(aso) {
-  pInfo <- aso@parameterInfo
+getColumnAbbrToImpute <- function(FLIPRData) {
+  pInfo <- FLIPRData@parameterInfo
   zeroReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$Zero_Replace == 1]
   naReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$NA_Replace == 1]
   imputeCols <- list()
@@ -623,47 +626,48 @@ getColumnAbbrToImpute <- function(aso) {
 
 #' Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
 #' This produces a single table that reports on the comparison between the reference or control state
-#' versus the aso treated state.
-#' @param aso an aso object having plate data (a platepair object) to transform
+#' versus the FLIPRData treated state.
+#' @param FLIPRData a FLIPRData object having plate data (a platepair object) to transform
 #' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
-#' @return an aso object with platepair object now containing the transformed data
-transformData <- function(aso, paired_analysis) {
-  i <- 1
+#' @return a FLIPRData object with platepair object now containing the transformed data
+transformData <- function(FLIPRData, paired_analysis) {
+    i <- 1
   plateNames <- c()
-  for (plateName in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[plateName]]
+  for (plateName in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
     if (paired_analysis) {
       if (i %% 2 == 0) {
-        aso@plateSet <- dataTransform(aso@plateSet, platePair = plateNames, method = "log2ratio", firstDataCol = 1)
+        FLIPRData@plateSet <- dataTransform(FLIPRData@plateSet, platePair = plateNames, method = "log2ratio", firstDataCol = 1)
         plateNames <- c()
       }
     } else {
       tfLabel <- paste0("untransformed", i)
       tfd <- plate@plateData
-      aso@plateSet@transformedPlateData[[tfLabel]] <- tfd
+      FLIPRData@plateSet@transformedPlateData[[tfLabel]] <- tfd
     }
     i <- i + 1
   }
-  return(aso)
+  return(FLIPRData)
 }
 
 #' Exports views of the plate data, for each parameter, as a pdf file.
 #' The exported file will include the date and time of file creation.
-#' @param aso an aso object containing plate data and having transformed data
-exportPlateViews <- function(aso) {
-  plateSet <- aso@plateSet
+#' @param FLIPRData a FLIPRData object containing plate data and having transformed data
+exportPlateViews <- function(FLIPRData) {
+  plateSet <- FLIPRData@plateSet
   i <- 1
   plateNames <- c()
   ptoPlot <- c()
 
-  for (plateName in names(aso@plateSet@plates)) {
-    plate <- aso@plateSet@plates[[plateName]]
+  for (plateName in names(FLIPRData@plateSet@plates)) {
+    plate <- FLIPRData@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
 
     # reports on each pair of plate reads
     if (i %% 2 == 0) {
-      ptoPlot <- plate@paramAbbrs
+      ptoPlot <- 
+        FLIPRTools:::setParameterAbbreviations(FLIPRData)@plateSet@plates[[plateName]]@parameters
       plotgrid <- trellisPlateSetViewsPairViews(plateSet,
         platePair = plateNames, paramsToPlot = ptoPlot, showRowColumnLabels = F,
         maxSatCount = 10, showLegend = F, tMethod = "log2ratio",
@@ -673,10 +677,10 @@ exportPlateViews <- function(aso) {
     }
     i <- i + 1
   }
-  rootDir <- aso@methodParameters[["root_dir"]]
+  rootDir <- FLIPRData@methodParameters[["root_dir"]]
   fileName <- constructFileName(
     baseFileName = "Plate_Coverage_Heatmaps",
-    plateReadLabel = aso@plateSet@plateNames[1],
+    plateReadLabel = FLIPRData@plateSet@plateNames[1],
     fileExtension = "pdf"
   )
 
@@ -685,38 +689,38 @@ exportPlateViews <- function(aso) {
   dev.off()
 }
 
-#' This function exports a series of barcharts for each ASO and each parameter into a pdf file.
-#' @param aso an aso object having transformed data.
-exportBarCharts <- function(aso) {
-  samples <- unique(aso@plateSet@plates[[1]]@plateAnnotMap$Compound)
+#' This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.
+#' @param FLIPRData a FLIPRData object having transformed data.
+exportBarCharts <- function(FLIPRData) {
+  samples <- unique(FLIPRData@plateSet@plates[[1]]@plateAnnotMap$Compound)
   samples <- samples[samples != ""]
 
   ### need to refer to input for control compound name/tag
   samples <- samples[!(samples %in% c("Veh1", "Veh2"))]
 
   # need to adjust to work over multiple plate pairs in plate set...
-  plateset <- aso@plateSet
-  params <- colnames(aso@plateSet@transformedPlateData[[1]])
-  plotgrid <- aso:::getBarChartTrellis(plateSet = plateset, samples = samples, parameters = params, samplesIn = "rows", tMethod = "log2Ratio")
+  plateset <- FLIPRData@plateSet
+  params <- colnames(FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]])
+  plotgrid <- FLIPRTools:::getBarChartTrellis(plateSet = plateset, samples = samples, parameters = params, samplesIn = "rows", tMethod = "log2Ratio")
 
   gridDim <- dim(plotgrid)
-  rootDir <- aso@methodParameters[["root_dir"]]
+  rootDir <- FLIPRData@methodParameters[["root_dir"]]
 
-  fileName <- constructFileName(baseFileName = "Response_Bar_Charts", plateReadLabel = aso@plateSet@plateNames[1], fileExtension = "pdf")
+  fileName <- constructFileName(baseFileName = "Response_Bar_Charts", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
   pdf(fileName, height = gridDim[1] * 2, width = gridDim[2] * 2)
   gridExtra::grid.arrange(plotgrid)
   dev.off()
 }
 
-#' Performes a paired t-test to compare ASO treated samples from the reference/control state.
-#' @param aso aso object having loaded plate data.
+#' Performes a paired t-test to compare FLIPRData treated samples from the reference/control state.
+#' @param FLIPRData FLIPRData object having loaded plate data.
 #' @return a dataframe containing stat results for each parameter, for each well.
-runPairedTTest <- function(aso) {
-  plateset <- aso@plateSet
+runPairedTTest <- function(FLIPRData) {
+  plateset <- FLIPRData@plateSet
   plateNames <- names(plateset@plates)
-  # return if the aso does not have an even number of plates (plate reads)
+  # return if the FLIPRData does not have an even number of plates (plate reads)
   if (length(plateNames) %% 2 != 0) {
-    return(aso)
+    return(FLIPRData)
   }
   results <- list()
   lfcVals <- list()
@@ -748,8 +752,8 @@ runPairedTTest <- function(aso) {
         concs <- concs[concs != 0]
         for (conc in concs) {
           wells <- currCov[currCov$Concentration == conc, ]$Well
-          refData <- aso:::getPlateDataByWellSet(plate = refPlate, wells)
-          exptData <- aso:::getPlateDataByWellSet(plate = exptPlate, wells)
+          refData <- FLIPRTools:::getPlateDataByWellSet(plate = refPlate, wells)
+          exptData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, wells)
 
           if (ncol(refData) != ncol(exptData)) {
             next
@@ -780,7 +784,7 @@ runPairedTTest <- function(aso) {
               resultName <- paste0(compound, "_", conc, "_", param)
 
               # 0 variance is not tolerated well
-              if (!(sd(data[, 2] - data[, 1]) == 0)) {
+              if (!(sd(data[, 2] - data[, 1]) < 1e-15)) {
                 res <- t.test(x = data[, 2], y = data[, 1], paired = TRUE, alternative = "two.sided")
                 results[[resultName]] <- res
               } else {
@@ -823,17 +827,17 @@ runPairedTTest <- function(aso) {
 }
 
 #' Generic T test function for multiple experimental designs
-#' @param aso aso object having loaded plate data.
+#' @param FLIPRData FLIPRData object having loaded plate data.
 #' @return a dataframe containing stat results for each parameter, for each well.
-runTTest <- function(aso) {
-  plateset <- aso@plateSet
+runTTest <- function(FLIPRData) {
+  plateset <- FLIPRData@plateSet
   plateNames <- names(plateset@plates)
   results <- list()
   lfcVals <- list()
   i <- 1
-  posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
-  negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
-  sampleKey <- aso@methodParameters$analysis_params$Test_Sample_Key
+  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
+  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
+  sampleKey <- FLIPRData@methodParameters$analysis_params$Test_Sample_Key
   
   for (name in plateNames) {
     ## get unique compounds, plate data and metadata from the reference plate
@@ -867,8 +871,8 @@ runTTest <- function(aso) {
       concs <- concs[concs != 0]
       for (conc in concs) {
         wells <- currCov[currCov$Concentration == conc, ]$Well
-        refData <- aso:::getPlateDataByWellSet(plate = exptPlate, controlWells)
-        exptData <- aso:::getPlateDataByWellSet(plate = exptPlate, wells)
+        refData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, controlWells)
+        exptData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, wells)
 
         ## if (ncol(refData) != ncol(exptData)) {
         ##   next
@@ -943,27 +947,27 @@ runTTest <- function(aso) {
 }
 
 #' Utility analysis method to generate z-prime factor data.
-#' @param aso aso object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
+#' @param FLIPRData FLIPRData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
 #' @param dataType Either transformed or raw data.
 #' @returns a z-prime factor result table with positive and negative control means, SDs, CVs and the z-prime factors for each parameter.
 #' @export
-zFactor <- function(aso, dataType = "transformed") {
+zFactor <- function(FLIPRData, dataType = "transformed") {
   # The @ is used to dereference
-  # Here we have the aso object, dereference the plateset object, and finally get the transformedPlateData
+  # Here we have the FLIPRData object, dereference the plateset object, and finally get the transformedPlateData
   # it's designed as a list or dictionary
-  plateTransformedData <- aso@plateSet@transformedPlateData[[1]]
+  plateTransformedData <- FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]]
 
   # an R list object is dereferenced using double brackets
   # you can refer to a member of the list by name or by index. *R indexing starts at 1
   if (dataType == "transformed") {
     testData <- plateTransformedData
   } else {
-    testData <- aso@plateSet@plates[[1]]@plateData
+    testData <- FLIPRData@plateSet@plates[[1]]@plateData
   }
   # the platemap holds well annotations, it's a dataframe
-  # this gets the plateset from the aso object, plate list, takes the first plate, and then
+  # this gets the plateset from the FLIPRData object, plate list, takes the first plate, and then
   # the plateAnnotationMap field.
-  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+  plateMap <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
 
   # an alternative to viewing a table is using the 'Global Envionment' in the upper right window.
   # if the variable is a data.frame, click on the table icon on the far right to view the data.
@@ -975,8 +979,8 @@ zFactor <- function(aso, dataType = "transformed") {
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != "Empty", ]
   splicedData <- splicedData[splicedData$Mask != 1, ]
 
-  posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
-  negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
+  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
+  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
 
   # Create a data frame that only contains positive controls
   PosCtrl <- splicedData[splicedData$WellType == posControlKey, ]
@@ -1013,21 +1017,21 @@ zFactor <- function(aso, dataType = "transformed") {
 
 #' Runs a z-prime factor analysis on transformed and raw data results. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
 #' Exports a file containing z-prime factor, mean, SD and CV of each parameter using both transformed and raw data.
-#' @param aso an aso object containing transformed data on which to report z-prime on.
+#' @param FLIPRData a FLIPRData object containing transformed data on which to report z-prime on.
 #' @export
-zFactorXlsx <- function(aso) {
-  fileName <- constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = aso@plateSet@plateNames[1], fileExtension = "xlsx")
+zFactorXlsx <- function(FLIPRData) {
+  fileName <- constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "xlsx")
 
   # Make a list
   zPrimeList <- list()
 
   # First call to zFactor calculation to calculate for transformed data
-  zPrimeList[["transformedDataResults"]] <- aso:::zFactor(aso)
+  zPrimeList[["transformedDataResults"]] <- FLIPRTools:::zFactor(FLIPRData)
 
   # Second call to zFactor to calculate for raw data
-  zPrimeList[["rawDataResults"]] <- aso:::zFactor(aso, "experimental")
+  zPrimeList[["rawDataResults"]] <- FLIPRTools:::zFactor(FLIPRData, "experimental")
 
-  fileName <- aso:::constructFileName(baseFileName = "zPrimeFactorResults", plateReadLabel = aso@plateSet@plateNames[1], fileExtension = "xlsx")
+  fileName <- FLIPRTools:::constructFileName(baseFileName = "zPrimeFactorResults", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "xlsx")
 
   # Write to an Excel file
   openxlsx::write.xlsx(zPrimeList,
@@ -1037,8 +1041,8 @@ zFactorXlsx <- function(aso) {
 }
 
 
-#' Runs a PCA on aso data
-#' @param aso aso object containing data
+#' Runs a PCA on FLIPRData data
+#' @param FLIPRData FLIPRData object containing data
 #' @param dataType c("transformed', 'raw', 'controls') to indicate if the data should be all transformed well data, all raw well data,
 #' or well data only from control wells.
 #' @param compoundList an optional vector of compounds ids to use for PCA
@@ -1046,20 +1050,20 @@ zFactorXlsx <- function(aso) {
 #' @returns a list object containing 4 fields. 'Wells PCA' and 'Parameters PCA' contain the prcomp objects for running PCA on wells or parameters.
 #' The Annotations element is a data frame containing well annotations. The 'Parameter Names' element is a data frame containing parameter info.
 #' @export
-runPCA <- function(aso, dataType = "transformed", compoundIDList = NULL, scale = T) {
-  plateTransformedData <- aso@plateSet@transformedPlateData
-  plateMap <- aso@plateSet@plates[[1]]@plateAnnotMap
+runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, scale = T) {
+  plateTransformedData <- FLIPRData@plateSet@transformedPlateData
+  plateMap <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
 
   if (dataType == "transformed") {
-    testData <- plateTransformedData[[1]]
+    testData <- plateTransformedData[[length(plateTransformedData)]]
   } else if (dataType == "raw") {
-    testData <- aso@plateSet@plates[[2]]@plateData
+    testData <- FLIPRData@plateSet@plates[[2]]@plateData
   } else if (dataType == "controls") {
-    posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
-    negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
+    posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
+    negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
     controlKeys <- c(posControlKey, negControlKey)
 
-    testData <- plateTransformedData[[1]]
+    testData <- plateTransformedData[[length(plateTransformedData)]]
     testData <- testData[plateMap$WellType %in% controlKeys, ]
     plateMap <- plateMap[plateMap$WellType %in% controlKeys, ]
   } else {
@@ -1072,7 +1076,7 @@ runPCA <- function(aso, dataType = "transformed", compoundIDList = NULL, scale =
   tableWithAnnotation$Compound[tableWithAnnotation$WellType == "Negative Control"] <- "Negative Control"
 
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != "Empty", ]
-  splicedData <- tableWithAnnotation[tableWithAnnotation$Mask != 1, ]
+  splicedData <- splicedData[splicedData$Mask != 1, ]
 
   splicedData <- na.omit(splicedData)
   rownames(splicedData) <- splicedData$Well
@@ -1088,12 +1092,12 @@ runPCA <- function(aso, dataType = "transformed", compoundIDList = NULL, scale =
   testDataSpliceT <- t(testDataSplice[,colSums(is.na(testDataSplice))<nrow(testDataSplice)])
   # transposition caused columns with zero variance, remove those
   testDataSpliceTvar <- testDataSpliceT[, which(apply(testDataSpliceT, 2, var) != 0)]
-  pcaASO <- prcomp(na.omit(as.matrix(testDataSpliceVar)), center = TRUE, scale. = scale, retx = TRUE)
-  pcaASOT <- prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = scale, retx = TRUE)
+  pcaFLIPRData <- prcomp(na.omit(as.matrix(testDataSpliceVar)), center = TRUE, scale. = scale, retx = TRUE)
+  pcaFLIPRDataT <- prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = scale, retx = TRUE)
 
   pcaList <- list()
-  pcaList[["Wells PCA"]] <- pcaASO
-  pcaList[["Parameters PCA"]] <- pcaASOT
+  pcaList[["Wells PCA"]] <- pcaFLIPRData
+  pcaList[["Parameters PCA"]] <- pcaFLIPRDataT
 
   # add something in the list to add the annotation
   pcaList[["Annotations"]] <- reducedPlateMap
@@ -1106,13 +1110,13 @@ runPCA <- function(aso, dataType = "transformed", compoundIDList = NULL, scale =
 #'
 #' @import ggfortify
 #' @import ggplot2
-#' @param aso The aso object containing pcaResults
+#' @param FLIPRData The FLIPRData object containing pcaResults
 #' @param pcaList A list object containing PCA results
 #' @param pcaType 1 = wells pca, 2 = parameters pca
 #' @param plotLoadings a boolean value determining if PCA loadings should be plotted.
 #' @param dataName an optional string to tag on the data results.
 #' @export
-plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings = F, dataName = "") {
+plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName = "") {
   plotTitle <- ""
 
   maxOverlap <- 10
@@ -1160,9 +1164,9 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings = F, dataName = "") 
   }
 
   fileName <- paste0(plotTitle, "_", dataName)
-  fileName <- aso:::constructFileName(baseFileName = fileName, plateReadLabel = aso@plateSet@plateNames[1], fileExtension = "pdf")
+  fileName <- FLIPRTools:::constructFileName(baseFileName = fileName, plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
 
-  pdf(file = fileName)
+  pdf(file = fileName, width = 11, height = 8)
   print(pcaPlot)
   dev.off()
 
@@ -1170,24 +1174,25 @@ plotPCA <- function(aso, pcaList, pcaType = 1, plotLoadings = F, dataName = "") 
 }
 
 
-#' generatees random forest predictions for ASOs
-#' @param aso an aso object containing transformed data that's ready for analysis
+#' generatees random forest predictions for FLIPRDatas
+#' @param FLIPRData a FLIPRData object containing transformed data that's ready for analysis
 #' @param masking list of wells to optionally mask
 #' @returns creates a prediction heatmap and dot plot, returns a Heatmap object.
 #' @import dplyr
 #' @export
-asoMachineLearning <- function(aso, masking = NULL) {
+FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
   ml <- new("MachineLearning")
 
-  plateName <- aso@plateSet@plateNames[1]
+  plateNames <- FLIPRData@plateSet@plateNames
+  plateName <- plateNames[length(plateNames)]
 
-  negControlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
-  posControlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
-  sampleKey <- aso@methodParameters$analysis_params$Test_Sample_Key
+  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
+  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
+  sampleKey <- FLIPRData@methodParameters$analysis_params$Test_Sample_Key
   
   # Subsetting data
-  data_imputed <- aso@plateSet@transformedPlateData[[1]]
-  sample_info <- aso@plateSet@plates[[1]]@plateAnnotMap
+  data_imputed <- FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]]
+  sample_info <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
 
   data_imputed <- data_imputed[which(sample_info$Compound != "Empty" & sample_info$Mask != 1), ]
 
@@ -1244,22 +1249,48 @@ asoMachineLearning <- function(aso, masking = NULL) {
   cont_training_data <-
     cont_training_data %>%
     dplyr::mutate_if(is.character,as.numeric)
-  
+  if(length(unique(cont_training_data$label))==1){
+    stop("No positive and/or negative controls found. Check the parameter input file for misspellings")
+  }
+
+  # Use a stable seed so repeated runs on the same input produce the same model
+  # and downstream heatmaps. Allow an override from the analysis parameter file.
+  randomSeed <- 12345L
+  seedParam <- FLIPRData@methodParameters$analysis_params$Random_Seed
+  if (!is.null(seedParam)) {
+    parsedSeed <- suppressWarnings(as.integer(seedParam))
+    if (!is.na(parsedSeed)) {
+      randomSeed <- parsedSeed
+    }
+  }
+
   # Train model
   for (i in c("rf")) {
     if(i == "rf"){
       mtry <- ceiling(ncol(cont_training_data)/3)
       ntree = 1000
-      tunegrid <- expand.grid(.mtry=mtry, .ntree = ntree)
+      tunegrid <- expand.grid(.mtry = mtry)
     }
+
+    set.seed(randomSeed)
+    resampleSeeds <- vector(mode = "list", length = 11)
+    for (seedIndex in 1:10) {
+      resampleSeeds[[seedIndex]] <- randomSeed + seedIndex
+    }
+    resampleSeeds[[11]] <- randomSeed + 11
+
     new_model <- caret::train(label ~ .,
       data = cont_training_data,
       method = i,
-      trControl = caret::trainControl(method = "cv", number = 10)
+      tuneGrid = tunegrid,
+      ntree = ntree,
+      trControl = caret::trainControl(method = "cv", number = 10, seeds = resampleSeeds)
     )
     # capture model
     ml@model <- new_model
 
+    plotVariableImportance(new_model,plateName=plateName)
+    
     # Subset data for testing
     testing_rows <- which(data_labels == sampleKey & sample_info$Compound != "PBS")
     testing_data <- data_imputed[testing_rows, ] %>% as.data.frame()
@@ -1273,41 +1304,49 @@ asoMachineLearning <- function(aso, masking = NULL) {
     new_testing_data <-
       new_testing_data %>%
       dplyr::mutate_if(is.character,as.numeric)
-    
     # Running the random forest
     new_test_labels <- stats::predict(new_model, newdata = new_testing_data)
-    new_predictions <- data.frame(
-      aso = sample_info$Compound[testing_rows], Concentration = sample_info$Concentration[testing_rows],
-      class = new_test_labels
-    )
 
+    new_predictions <- data.frame(
+      FLIPRData = sample_info$Compound[testing_rows], Concentration = sample_info$Concentration[testing_rows],
+      Index = rownames(testing_data)
+    )
+    new_test_labels <- data.frame(new_test_labels, Index = names(new_test_labels))
+
+    new_predictions <- new_predictions %>%
+      dplyr::left_join(new_test_labels, by = "Index") %>%
+      dplyr::rename("class"="new_test_labels")
+    
     # capture well-level predictions
     ml@predictions <- new_predictions
 
     # Generating new data frames with numerical data
-    compound_list <- unique(new_predictions$aso)
+    compound_list <- unique(new_predictions$FLIPRData)
 
-    prediction_mean <- data.frame()
-    prediction_sd <- data.frame()
+    prediction_mean <- data.frame(check.names = FALSE)
+    prediction_sd <- data.frame(check.names = FALSE)
 
     for (i in compound_list) {
       # create concentration list for each compound
-      conc_list <- as.numeric(unique(new_predictions[new_predictions$aso == i, "Concentration"]))
+      conc_list <- sort(unique(as.numeric(new_predictions[new_predictions$FLIPRData == i, "Concentration"])))
 
       for (j in conc_list) {
         # create class list for each concentration of each compound
-        class_df <- new_predictions[new_predictions$aso == i & new_predictions$Concentration == j, "class"] %>%
+        class_df <- new_predictions[new_predictions$FLIPRData == i & new_predictions$Concentration == j, "class"] %>%
           as.numeric() %>%
           as.data.frame()
 
         # calculate average prediction and standard deviation
-        mean_class <- mean(class_df$.)
-        sd_class <- sd(class_df$.)
+        mean_class <- mean(class_df$., na.rm=TRUE)
+        sd_class <- sd(class_df$., na.rm=TRUE)
 
         prediction_mean[i, as.character(j)] <- mean_class
         prediction_sd[i, as.character(j)] <- sd_class
       }
     }
+
+    prediction_mean <- FLIPRTools:::normalizePredictionConcentrationColumns(prediction_mean)
+    prediction_sd <- FLIPRTools:::normalizePredictionConcentrationColumns(prediction_sd)
 
     # capture prediction means and SDs
     ml@prediction_means <- prediction_mean
@@ -1317,11 +1356,11 @@ asoMachineLearning <- function(aso, masking = NULL) {
     pred_heatmap <- ComplexHeatmap::Heatmap(as.matrix(prediction_mean),
       rect_gp = grid::gpar(col = "white", lwd = 2),
       column_title = "Concentration", column_title_side = "bottom", name = "Prediction",
-      row_title = "ASO", cluster_rows = FALSE, show_column_dend = FALSE,
-      column_order = order(as.numeric(gsub("column", "", colnames(prediction_mean))))
+      row_title = "FLIPRData", cluster_rows = FALSE, cluster_columns = FALSE,
+      show_column_dend = FALSE
     )
 
-    fileName <- aso:::constructFileName(baseFileName = "ASO_Tox_Heatmap", plateReadLabel = plateName, fileExtension = ".pdf")
+    fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_Heatmap", plateReadLabel = plateName, fileExtension = ".pdf")
 
     pdf(fileName)
     print(pred_heatmap)
@@ -1346,19 +1385,20 @@ asoMachineLearning <- function(aso, masking = NULL) {
       }
     }
 
-    aso_plot_list <- list()
+    FLIPRData_plot_list <- list()
 
     # concentration needs to be a character vector or factor
-    new_predictions$Concentration <- as.factor(new_predictions$Concentration)
+    orderedConcentrations <- colnames(prediction_mean)
+    new_predictions$Concentration <- factor(as.character(new_predictions$Concentration), levels = orderedConcentrations)
 
-    uniqueASONames <- unique(new_predictions$aso)
+    uniqueFLIPRDataNames <- unique(new_predictions$FLIPRData)
 
 
-    for (i in 1:length(uniqueASONames)) {
-      asoName <- uniqueASONames[i]
+    for (i in 1:length(uniqueFLIPRDataNames)) {
+      FLIPRDataName <- uniqueFLIPRDataNames[i]
 
       concDotPlot <- ggplot(
-        data = new_predictions[new_predictions$aso == asoName, ],
+        data = new_predictions[new_predictions$FLIPRData == FLIPRDataName, ],
         aes(x = Concentration, y = class)
       ) +
         geom_dotplot(binaxis = "y", stackdir = "center") +
@@ -1366,51 +1406,55 @@ asoMachineLearning <- function(aso, masking = NULL) {
           fun.data = mean_sdl, fun.args = list(mult = 1),
           geom = "errorbar", color = "red", width = 0.2
         ) +
-        ggtitle(asoName) + # aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
+        ggtitle(FLIPRDataName) + # aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
         coord_cartesian(ylim = c(-0.1, 1.1)) +
         scale_y_continuous(breaks = seq(0, 1, 0.25)) +
         geom_point(size = 2) +
         ylab("Prediction")
 
-      aso_plot_list[[i]] <- concDotPlot
+      FLIPRData_plot_list[[i]] <- concDotPlot
     }
 
-    fileName <- aso:::constructFileName(baseFileName = "ASO_Tox_DotPlot", plateReadLabel = plateName, fileExtension = ".pdf")
+    fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_DotPlot", plateReadLabel = plateName, fileExtension = ".pdf")
 
-    nrows <- floor(length(aso_plot_list) / 2) + length(aso_plot_list) %% 2
-    pages <- floor(nrows / 3) + nrows %% 3
+    nrows <- floor(length(FLIPRData_plot_list) / 2) + length(FLIPRData_plot_list) %% 2
+    if(nrows < 3){
+      pages <- 1
+    }else{
+      pages <- floor(nrows / 3) + nrows %% 3
+    }
 
     pdf(fileName)
     lastToPlot <- 0
     for (page in 0:(pages - 1)) {
       firstToPlot <- lastToPlot + 1
       lastToPlot <- firstToPlot + 5
-      if (lastToPlot > length(aso_plot_list)) {
-        lastToPlot <- length(aso_plot_list)
+      if (lastToPlot > length(FLIPRData_plot_list)) {
+        lastToPlot <- length(FLIPRData_plot_list)
       }
-      suppressMessages(do.call(gridExtra::grid.arrange, c(aso_plot_list[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
+      suppressMessages(do.call(gridExtra::grid.arrange, c(FLIPRData_plot_list[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
     }
     dev.off()
 
     pred_plot_df <- cbind(pred_plot_mean, pred_plot_sd)
 
-    fileName <- aso:::constructFileName(baseFileName = "MachineLearning_Predictions", plateReadLabel = plateName, fileExtension = "xlsx")
+    fileName <- FLIPRTools:::constructFileName(baseFileName = "MachineLearning_Predictions", plateReadLabel = plateName, fileExtension = "xlsx")
 
     openxlsx::write.xlsx(pred_plot_df,
       file = fileName,
       rowNames = TRUE
     )
   }
-  aso@mlResults[[plateName]] <- ml
+  FLIPRData@mlResults[[plateName]] <- ml
 
-  return(aso)
+  return(FLIPRData)
 }
 
 
-evaluateControlWellPCA <- function(aso) {
-  pcaRes <- aso@pcaResults
-  posCtrlKey <- aso@methodParameters$analysis_params$Positive_Control_Key
-  negCtrlKey <- aso@methodParameters$analysis_params$Negative_Control_Key
+evaluateControlWellPCA <- function(FLIPRData) {
+  pcaRes <- FLIPRData@pcaResults
+  posCtrlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
+  negCtrlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
 
   for (id in names(pcaRes)) {
     print(id)
@@ -1433,4 +1477,13 @@ evaluateControlWellPCA <- function(aso) {
     print(length(zScoreNeg))
     print(zScoreNeg)
   }
+}
+
+plotVariableImportance <- function(model, plateName){
+  importance <- varImp(model, scale = FALSE)
+  fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Variable_Importance",
+                                             plateReadLabel = plateName, fileExtension = ".pdf")
+  pdf(fileName)
+  print(plot(importance))
+  dev.off()
 }

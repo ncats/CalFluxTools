@@ -1,10 +1,10 @@
 #' Starts a log file.
 initializeLog <- function(logLevel="INFO") {
   logger::log_level(logLevel)
-  logFileName <- paste0(getwd(),"/ASO_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
+  logFileName <- paste0(getwd(),"/FLIPRData_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
   logger::log_appender(logger::appender_file(logFileName))
 
-  logger::log_info("ASO Analysis Started -- Log Initialized")
+  logger::log_info("FLIPRData Analysis Started -- Log Initialized")
 }
 
 idleLog <- function() {
@@ -13,8 +13,8 @@ idleLog <- function() {
   logger::log_appender(logger::appender_tee(logFileName))
 }
 
-initializedExportLocation <- function(aso) {
-  outDir <- constructFileName(baseFileName = paste0(aso@methodParameters$analysis_name, "_ASO_Analysis"))
+initializedExportLocation <- function(FLIPRData) {
+  outDir <- constructFileName(baseFileName = paste0(FLIPRData@methodParameters$analysis_name, "_FLIPRData_Analysis"))
   path <- paste0(getwd(), "/", outDir)
   if(!dir.exists(path)) {
     dir.create(path)
@@ -63,6 +63,9 @@ subsetPlateSet <- function(plateSet, plateIndicesToKeep) {
   plateSet@plateIdList <- plateSet@plateIdList[plateIndicesToKeep]
   plateSet@plates <- plateSet@plates[plateIndicesToKeep]
   plateSet@plateNames <- plateSet@plateNames[plateIndicesToKeep]
+  plateSet@transformedPlateData <- list()
+  plateSet@transformationNames <- vector()
+  plateSet@dataCoverageTables <- list()
 
   print(length(plateSet@plates))
 
@@ -343,7 +346,7 @@ imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
 
 
 #' missingDataReport reports on plate missing values
-#' @param plate ASO plate
+#' @param plate FLIPRData plate
 #' @param plateSize plate size, e.g. 384 (default)
 #' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
 #' @export
@@ -376,7 +379,7 @@ missingDataReport <- function(plate, plateSize = 384) {
 }
 
 #' Calculate parameter coefficient of variation
-#' @param plate ASO plate
+#' @param plate FLIPRData plate
 #' @param plateSize plate size, e.g. 384 (default)
 #' @return returns a dataframe with columns 'parameter' and 'CV'
 #' @export
@@ -549,13 +552,12 @@ rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
 #'
 #' @return Returns a list of plate matrix objects, named by each of the measured parameters in parameter
 rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
-
   plateData <- plate@plateData[parameters]
 
   map = list()
   if(nrow(plateData) == 384) {
 
-    rc <- aso:::getRowAndColumnNames(384)
+    rc <- FLIPRTools:::getRowAndColumnNames(384)
     i = 0
     for(stat in parameters) {
       i = i + 1
@@ -609,7 +611,7 @@ getRowAndColumnNames <- function(plateDim = 384) {
 #' Note that the staturated (beyond bound values) are split at the low and high ends of the bounds.
 #' That means that if 10 elements are allowed to 'saturate' (exceed bounds), 5 fall off the high end and 5 fall off the low end.
 #'
-#' The utility of this method is to set reasonable color scale bounds for heatmaps.
+#' The utility of this method is to set reFLIPRDatanable color scale bounds for heatmaps.
 #'
 #' @param plateMatrix input plate dimension matrix
 #' @param maxSaturationCount the number of points (plate wells) to fall off the returned scale (half will be off high end, half of these off the low end)
@@ -747,13 +749,13 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
 
 #' A utility method to replace the input AUC parameter name with a new name.
 #' The original text files contain unicode characters that not not well supported.
-#' @param aso the aso object to patch AUC parameter names
-#' @return returns an aso object with the AUC parameter names patched.
-aucParameterPatch <- function(aso) {
+#' @param FLIPRData the FLIPRData object to patch AUC parameter names
+#' @return returns a FLIPRData object with the AUC parameter names patched.
+aucParameterPatch <- function(FLIPRData) {
   # patch plate data
-  for(platename in names(aso@plateSet@plates)) {
+  for(platename in names(FLIPRData@plateSet@plates)) {
     i=1
-    plate <- aso@plateSet@plates[[platename]]
+    plate <- FLIPRData@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
@@ -768,11 +770,11 @@ aucParameterPatch <- function(aso) {
       i = i + 1
     }
 
-    aso@plateSet@plates[[platename]] <- plate
+    FLIPRData@plateSet@plates[[platename]] <- plate
   }
 
   # patch plate info
-  pInfo <- aso@parameterInfo
+  pInfo <- FLIPRData@parameterInfo
   i = 1
   for(i in 1:nrow(pInfo)) {
     n <- pInfo[i,1]
@@ -785,8 +787,8 @@ aucParameterPatch <- function(aso) {
     i = i + 1
   }
 
-  aso@parameterInfo <- pInfo
-  return(aso)
+  FLIPRData@parameterInfo <- pInfo
+  return(FLIPRData)
 }
 
 
@@ -801,10 +803,10 @@ getPlateDataByWellSet <- function(plate, wellSet) {
 }
 
 #' This function exports a paired t-test result.
-#'  @param aso an aso object on which paired ttest has been run
+#'  @param FLIPRData a FLIPRData object on which paired ttest has been run
 #'  @param ttestResult a dataframe represenint the ttest result
 #'  @param fileName the t-test result ouput file name.
-exportPairedTTestResult <- function(aso, ttestResult, fileName) {
+exportPairedTTestResult <- function(FLIPRData, ttestResult, fileName) {
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
   tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
@@ -866,7 +868,7 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
 
   fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
 
-  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = aso@plateSet@plateNames[2],
+  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = FLIPRData@plateSet@plateNames[2],
                                fileExtension = "xlsx")
 
   # lets add the unpivoted table
@@ -877,20 +879,22 @@ exportPairedTTestResult <- function(aso, ttestResult, fileName) {
 
 
 #' A utility method to export transformed data. The transformed data represents
-#' change between the ASO treated state and teh control/untreated state.
-#' @param aso an aso object from which to export transformed data.
+#' change between the FLIPRData treated state and teh control/untreated state.
+#' @param FLIPRData a FLIPRData object from which to export transformed data.
 #' @export
-exportTransformedData <- function(aso) {
-  data <- data.frame(aso@plateSet@transformedPlateData[[1]])
+exportTransformedData <- function(FLIPRData) {
+  transformedNames <- names(FLIPRData@plateSet@transformedPlateData)
+  currentTfName <- transformedNames[length(transformedNames)]
+  data <- data.frame(FLIPRData@plateSet@transformedPlateData[[currentTfName]])
 
-  wellAnn <- aso@plateSet@plates[[1]]@plateAnnotMap
+  wellAnn <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
 
   data <- cbind(wellAnn, data)
 
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = aso@plateSet@plateNames[1],
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = FLIPRData@plateSet@plateNames[1],
                                 fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
@@ -898,20 +902,20 @@ exportTransformedData <- function(aso) {
 
 
 #' Exports a colelction of random forest results into one file, along with Benchmark Dose.
-#' @param aso The aso object containing the MachineLearning Results
+#' @param FLIPRData The FLIPRData object containing the MachineLearning Results
 #' @export
-exportMachineLearningResults <- function(aso) {
+exportMachineLearningResults <- function(FLIPRData) {
 
-  fileName <- aso:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
+  fileName <- FLIPRTools:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
                                 fileExtension = "xlsx")
 
   predResults = list()
   bmd <- NULL
   iter = 1
 
-  for(resName in names(aso@mlResults)) {
+  for(resName in names(FLIPRData@mlResults)) {
 
-    res <- aso@mlResults[[resName]]@prediction_means
+    res <- normalizePredictionConcentrationColumns(FLIPRData@mlResults[[resName]]@prediction_means)
 
     print(colnames(res))
     resName <- paste0(resName, "_pred_means")
@@ -927,18 +931,18 @@ exportMachineLearningResults <- function(aso) {
     iter = iter + 1
   }
 
-  colnames(bmd) <- names(aso@mlResults)
+  colnames(bmd) <- names(FLIPRData@mlResults)
   bmdList <- list(bench_mark_dose=bmd)
   predResults <- append(bmdList, predResults)
 
-  for(resName in names(aso@mlResults)) {
-    res <- aso@mlResults[[resName]]@prediction_sds
+  for(resName in names(FLIPRData@mlResults)) {
+    res <- normalizePredictionConcentrationColumns(FLIPRData@mlResults[[resName]]@prediction_sds)
     resName <- paste0(resName, "_pred_sds")
     predResults[[resName]] <- res
   }
 
-  for(resName in names(aso@mlResults)) {
-    res <- aso@mlResults[[resName]]@predictions
+  for(resName in names(FLIPRData@mlResults)) {
+    res <- FLIPRData@mlResults[[resName]]@predictions
     resName <- paste0(resName, "_pred_full")
     predResults[[resName]] <- res
   }
@@ -967,11 +971,27 @@ getBenchmarkDose <- function(predictionMeans, predCutoff = 0.5) {
 }
 
 
-#' Exports prediction heatmaps for each plate read. These are generated based on the aso classes mlResults slot.
-#' @param aso The aso object containing Random Forest result.
-#' @export
-exportRfPredictionHeatmaps <- function(aso) {
+normalizePredictionConcentrationColumns <- function(predictionDf) {
+  if (is.null(predictionDf) || ncol(predictionDf) == 0) {
+    return(predictionDf)
+  }
 
+  originalNames <- colnames(predictionDf)
+  normalizedNames <- sub("^X(?=[0-9.])", "", originalNames, perl = TRUE)
+  numericNames <- suppressWarnings(as.numeric(normalizedNames))
+  sortIdx <- order(is.na(numericNames), numericNames, normalizedNames)
+
+  predictionDf <- predictionDf[, sortIdx, drop = FALSE]
+  colnames(predictionDf) <- normalizedNames[sortIdx]
+
+  return(predictionDf)
+}
+
+
+#' Exports prediction heatmaps for each plate read. These are generated based on the FLIPRData classes mlResults slot.
+#' @param FLIPRData The FLIPRData object containing Random Forest result.
+#' @export
+exportRfPredictionHeatmaps <- function(FLIPRData) {
   predResults = list()
   bmd <- NULL
   iter = 1
@@ -979,8 +999,9 @@ exportRfPredictionHeatmaps <- function(aso) {
   rfRes = NULL
   timeLabels = c()
   levels = c()
-  for(resName in names(aso@mlResults)) {
-    res <- aso@mlResults[[resName]]@prediction_means
+  for(resName in names(FLIPRData@mlResults)) {
+    res <- FLIPRData@mlResults[[resName]]@prediction_means
+    res <- normalizePredictionConcentrationColumns(res)
     if(iter == 1) {
       rfRes = res
     } else {
@@ -991,14 +1012,13 @@ exportRfPredictionHeatmaps <- function(aso) {
     levels = c(levels, resName)
     iter = iter + 1
   }
-
   timeLabels <- factor(timeLabels, levels=levels)
 
   rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
                            column_title_side = "top", column_names_side="top", name = 'Prediction',
-                          row_title = "ASO", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+                          row_title = "Exposure", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
 
-  fileName <- aso:::constructFileName(paste0(aso@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
+  fileName <- FLIPRTools:::constructFileName(paste0(FLIPRData@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
                           fileExtension = "pdf")
 
   pdf(file=fileName, width=13, height=6)
@@ -1007,4 +1027,3 @@ exportRfPredictionHeatmaps <- function(aso) {
   dev.off()
 
 }
-
