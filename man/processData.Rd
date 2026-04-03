@@ -2,15 +2,15 @@
 % Please edit documentation in R/analysis.R
 \name{processData}
 \alias{processData}
-\title{This method is a convenience method that displays a file chooser for selecting an ASO Paramter Excel file for processing.
+\title{This method is a convenience method that displays a file chooser for selecting a FLIPRData Paramter Excel file for processing.
 The method will run data procesing and output diagnostic plots and tables.}
 \usage{
 processData()
 }
 \value{
-Returns an aso object containing analysis parameters from the parameter file, input, refined and transformed plate data.
+Returns a FLIPRData object containing analysis parameters from the parameter file, input, refined and transformed plate data.
 }
 \description{
-This method is a convenience method that displays a file chooser for selecting an ASO Paramter Excel file for processing.
+This method is a convenience method that displays a file chooser for selecting a FLIPRData Paramter Excel file for processing.
 The method will run data procesing and output diagnostic plots and tables.
 }

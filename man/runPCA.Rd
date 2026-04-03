@@ -2,12 +2,12 @@
 % Please edit documentation in R/analysis.R
 \name{runPCA}
 \alias{runPCA}
-\title{Runs a PCA on aso data}
+\title{Runs a PCA on FLIPRData data}
 \usage{
-runPCA(aso, dataType = "transformed", compoundIDList = NULL, scale = T)
+runPCA(FLIPRData, dataType = "transformed", compoundIDList = NULL, scale = T)
 }
 \arguments{
-\item{aso}{aso object containing data}
+\item{FLIPRData}{FLIPRData object containing data}
 
 \item{dataType}{c("transformed', 'raw', 'controls') to indicate if the data should be all transformed well data, all raw well data,
 or well data only from control wells.}
@@ -21,5 +21,5 @@ a list object containing 4 fields. 'Wells PCA' and 'Parameters PCA' contain the 
 The Annotations element is a data frame containing well annotations. The 'Parameter Names' element is a data frame containing parameter info.
 }
 \description{
-Runs a PCA on aso data
+Runs a PCA on FLIPRData data
 }

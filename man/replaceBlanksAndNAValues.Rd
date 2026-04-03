@@ -4,13 +4,13 @@
 \alias{replaceBlanksAndNAValues}
 \title{Replaces 'Blank' or Empty data and N/A data for each parameter according to specified rules for each parameter.}
 \usage{
-replaceBlanksAndNAValues(aso)
+replaceBlanksAndNAValues(FLIPRData)
 }
 \arguments{
-\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
+returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
 }
 \description{
 Replaces 'Blank' or Empty data and N/A data for each parameter according to specified rules for each parameter.

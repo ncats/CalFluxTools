@@ -4,10 +4,10 @@
 \alias{zFactor}
 \title{Utility analysis method to generate z-prime factor data.}
 \usage{
-zFactor(aso, dataType = "transformed")
+zFactor(FLIPRData, dataType = "transformed")
 }
 \arguments{
-\item{aso}{aso object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)}
+\item{FLIPRData}{FLIPRData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)}
 
 \item{dataType}{Either transformed or raw data.}
 }

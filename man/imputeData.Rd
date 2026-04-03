@@ -5,13 +5,13 @@
 \title{Performs missing data imputation, replacing missing data according to a supplied method name.
 Note that this method is not currently used in typical pre-processing.}
 \usage{
-imputeData(aso)
+imputeData(FLIPRData)
 }
 \arguments{
-\item{aso}{an aso object that has a platepair and processing parameters}
+\item{FLIPRData}{a FLIPRData object that has a platepair and processing parameters}
 }
 \value{
-the aso object now having missing values imputed
+the FLIPRData object now having missing values imputed
 }
 \description{
 Performs missing data imputation, replacing missing data according to a supplied method name.

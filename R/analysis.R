@@ -105,7 +105,6 @@ processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
       #       print(i)
       #       print(length(newFLIPRData@plateSet@plates))
       newFLIPRData <- runDataProcessing(newFLIPRData, paired_analysis)
-
       # Preserve the original transformation label from the processed pair so
       # later analyses can distinguish timepoints correctly in the full object.
       for (tfName in names(newFLIPRData@plateSet@transformedPlateData)) {

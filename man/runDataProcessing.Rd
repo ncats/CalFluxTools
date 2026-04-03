@@ -2,18 +2,20 @@
 % Please edit documentation in R/analysis.R
 \name{runDataProcessing}
 \alias{runDataProcessing}
-\title{This method is a wrapper method that performs all data processing operations according to the supplied ASO Parameter File.
+\title{This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
 The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.}
 \usage{
-runDataProcessing(aso)
+runDataProcessing(FLIPRData, paired_analysis)
 }
 \arguments{
-\item{asoParamterXlsxFilePath}{a file path and file name for the ASO parameter xlsx file. All information required to process aso data is contained in this file.}
+\item{paired_analysis}{boolean specifying if plate pairs are used for baseline correction}
+
+\item{FLIPRDataParamterXlsxFilePath}{a file path and file name for the FLIPRData parameter xlsx file. All information required to process FLIPRData data is contained in this file.}
 }
 \value{
-Returns an aso objecdt with loaded and transformed data. During processing several output summary files will be exported.
+Returns a FLIPRData objecdt with loaded and transformed data. During processing several output summary files will be exported.
 }
 \description{
-This method is a wrapper method that performs all data processing operations according to the supplied ASO Parameter File.
+This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
 The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.
 }

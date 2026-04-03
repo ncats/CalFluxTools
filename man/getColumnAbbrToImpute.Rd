@@ -4,10 +4,10 @@
 \alias{getColumnAbbrToImpute}
 \title{helper function to determine which parameters should undergo imputation.}
 \usage{
-getColumnAbbrToImpute(aso)
+getColumnAbbrToImpute(FLIPRData)
 }
 \arguments{
-\item{aso}{an aso object having plate data loaded ans parameters to control the imputation process}
+\item{FLIPRData}{a FLIPRData object having plate data loaded ans parameters to control the imputation process}
 }
 \value{
 a list object with two fields incicating which columns to impute for zeros or NAs,

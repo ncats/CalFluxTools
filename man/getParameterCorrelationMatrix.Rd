@@ -4,10 +4,10 @@
 \alias{getParameterCorrelationMatrix}
 \title{creates a correlation plot for paramters}
 \usage{
-getParameterCorrelationMatrix(aso)
+getParameterCorrelationMatrix(FLIPRData)
 }
 \arguments{
-\item{aso}{an aso object containing transformed data.}
+\item{FLIPRData}{a FLIPRData object containing transformed data.}
 }
 \description{
 creates a correlation plot for paramters

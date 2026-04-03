@@ -18,5 +18,5 @@ getPlateValueCutoffs(plateMatrix, maxSaturationCount = 10)
 returns a vector with two numeric values, a low-end cutoff and a high-end cutoff, in that order
 }
 \description{
-The utility of this method is to set reasonable color scale bounds for heatmaps.
+The utility of this method is to set reFLIPRDatanable color scale bounds for heatmaps.
 }

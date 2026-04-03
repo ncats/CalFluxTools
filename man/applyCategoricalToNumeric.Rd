@@ -5,13 +5,13 @@
 \title{Converts categorical data to numeric values according to specified rules in the input parameter file.
 Note that this method will only run on parameters that are flagged as having categorical data.}
 \usage{
-applyCategoricalToNumeric(aso)
+applyCategoricalToNumeric(FLIPRData)
 }
 \arguments{
-\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the aso object categorical parameters converted to numeric values as specified in the parameter file.
+returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
 }
 \description{
 Converts categorical data to numeric values according to specified rules in the input parameter file.

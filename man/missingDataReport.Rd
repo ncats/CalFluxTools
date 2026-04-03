@@ -7,7 +7,7 @@
 missingDataReport(plate, plateSize = 384)
 }
 \arguments{
-\item{plate}{ASO plate}
+\item{plate}{FLIPRData plate}
 
 \item{plateSize}{plate size, e.g. 384 (default)}
 }

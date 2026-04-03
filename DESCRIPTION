@@ -1,33 +1,29 @@
-Package: aso
+Package: FLIPRTools
 Type: Package
-Title: Package for internal use at NCATS, used for parsing and analyzing Stemonix plate data
+Title: Package for internal use at NCATS, used for parsing and analyzing FLIPR data
 Version: 0.1.0
 Author: Andrew Patt, John Braisted
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Maintainer: Andrew Patt <andrew.patt@nih.gov>
+Description: Parses, quality controls, visualizes and analyzes results from data generated on the FLIPR platform. Accommodates a variety of study designs. Data should be in the statALL format and normalized using the Screenworks software.
 License: MIT
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.2
 Imports: 
-    Boruta,
     caret,
     circlize,
     ComplexHeatmap,
-    cowplot,
+    corrplot,
     dplyr,
-    forcats,
     ggfortify,
     ggplot2,
-    ggpubr,
+    ggplotify,
     ggrepel,
     grid,
     gridExtra,
-    janitor,
     logger,
-    plotly,
-    randomForest,
+    openxlsx,
     readr,
+    reshape2,
     rlist,
     scales

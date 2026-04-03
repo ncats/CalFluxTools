@@ -5,10 +5,10 @@
 \title{Runs a z-prime factor analysis on transformed and raw data results. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
 Exports a file containing z-prime factor, mean, SD and CV of each parameter using both transformed and raw data.}
 \usage{
-zFactorXlsx(aso)
+zFactorXlsx(FLIPRData)
 }
 \arguments{
-\item{aso}{an aso object containing transformed data on which to report z-prime on.}
+\item{FLIPRData}{a FLIPRData object containing transformed data on which to report z-prime on.}
 }
 \description{
 Runs a z-prime factor analysis on transformed and raw data results. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)

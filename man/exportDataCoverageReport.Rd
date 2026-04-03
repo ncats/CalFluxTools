@@ -4,10 +4,10 @@
 \alias{exportDataCoverageReport}
 \title{Exports the data coverage report that lists parameters and information on missing data.}
 \usage{
-exportDataCoverageReport(aso)
+exportDataCoverageReport(FLIPRData)
 }
 \arguments{
-\item{aso}{the aso object containing pre-computed data coverage results}
+\item{FLIPRData}{the FLIPRData object containing pre-computed data coverage results}
 }
 \description{
 Exports the data coverage report that lists parameters and information on missing data.

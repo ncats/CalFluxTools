@@ -4,13 +4,13 @@
 \alias{applyDataCoverageFilters}
 \title{This method optionally removes parameters that have a large amount of missing data, beyond specified levels.}
 \usage{
-applyDataCoverageFilters(aso)
+applyDataCoverageFilters(FLIPRData)
 }
 \arguments{
-\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the aso object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
+returns the FLIPRData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
 }
 \description{
 This method optionally removes parameters that have a large amount of missing data, beyond specified levels.

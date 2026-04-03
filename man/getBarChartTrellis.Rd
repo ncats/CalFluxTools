@@ -15,7 +15,7 @@ getBarChartTrellis(
 \arguments{
 \item{plateSet}{the plateset object containing the data.}
 
-\item{samples}{the vector of sample names (compounds, aso ids), for which to pull data.}
+\item{samples}{the vector of sample names (compounds, FLIPRData ids), for which to pull data.}
 
 \item{parameters}{a vector of parameters for which to build plots.}
 

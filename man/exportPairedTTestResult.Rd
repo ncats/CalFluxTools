@@ -3,15 +3,15 @@
 \name{exportPairedTTestResult}
 \alias{exportPairedTTestResult}
 \title{This function exports a paired t-test result.
- @param aso an aso object on which paired ttest has been run
+ @param FLIPRData a FLIPRData object on which paired ttest has been run
  @param ttestResult a dataframe represenint the ttest result
  @param fileName the t-test result ouput file name.}
 \usage{
-exportPairedTTestResult(aso, ttestResult, fileName)
+exportPairedTTestResult(FLIPRData, ttestResult, fileName)
 }
 \description{
 This function exports a paired t-test result.
- @param aso an aso object on which paired ttest has been run
+ @param FLIPRData a FLIPRData object on which paired ttest has been run
  @param ttestResult a dataframe represenint the ttest result
  @param fileName the t-test result ouput file name.
 }

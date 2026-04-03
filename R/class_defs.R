@@ -35,7 +35,7 @@ setClass("plateset", slots=list(
 )
 
 #' @export
-setClass("aso", slots=list(
+setClass("FLIPRData", slots=list(
   plateSet = 'plateset',
   parameterInfo = "data.frame",
   methodParameters = "list",

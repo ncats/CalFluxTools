@@ -8,7 +8,7 @@
 #' @export
 missingPlateDataChart <- function(plate, plateSize = 384, missingValLimit = 10) {
 
-  missingData <- aso::missingDataReport(plate, plateSize)
+  missingData <- missingDataReport(plate, plateSize)
 
   missingData <- na.omit(missingData[missingData$good_count < (plateSize-missingValLimit),])
 
@@ -44,7 +44,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, paramsToPlot, sho
   firstPlate <- T
   for(plateName in platePair) {
     plate <- plateSet@plates[[plateName]]
-    pList <- aso:::trellisPlateView(plate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
+    pList <- FLIPRTools:::trellisPlateView(plate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                               showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                               showLegend = showLegend, ggplot=ggplot, elementDividers = elementDividers,
                               plateTitle = plateName, showRowTitle = firstPlate)
@@ -58,10 +58,10 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, paramsToPlot, sho
     if(nrow(plateSet@transformedPlateData[[tName]]) > 0) {
 
       # wrap the tranformed data in a plate and send off for plotting
-      tPlate <- aso:::clonePlate(plate)
+      tPlate <- FLIPRTools:::clonePlate(plate)
       tPlate@plateData <- plateSet@transformedPlateData[[tName]]
 
-      plotLists[[tName]] <- aso:::trellisPlateView(plate = tPlate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
+      plotLists[[tName]] <- FLIPRTools:::trellisPlateView(plate = tPlate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                                             showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                                              showLegend = T, ggplot=ggplot, elementDividers=elementDividers,
                                             scaleColors = c("green", "black", "red"), plateTitle = tName)
@@ -101,7 +101,7 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
   pList <- list()
 
   # get the mapping from statistic to a matrix for the stat, in plate format
-  matrixMap <- aso:::rawPlateMatrixStatsToPlateFormat(plate=plate, parameter=paramsToPlot)
+  matrixMap <- FLIPRTools:::rawPlateMatrixStatsToPlateFormat(plate=plate, parameter=paramsToPlot)
 
   firstInList = T
 
@@ -109,20 +109,20 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
 
     # build a Heatmap for each statistc
     if(!ggplot) {
-      p <- aso:::getPlatePlotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+      p <- FLIPRTools:::getPlatePlotFromMatrix(matrixMap[[stat]], plotTitle = stat,
                                         showRowColLabels = showRowColumnLabels,
                                         maxSatCount = maxSatCount,
                                         showLegend =  showLegend)
     } else {
 
       if(!firstInList) {
-      p <- aso:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+      p <- FLIPRTools:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
                                          showRowColLabels = showRowColumnLabels,
                                          maxSatCount = maxSatCount,
                                          showLegend =  showLegend, elementDividers=elementDividers, scaleColors=scaleColors,
                                          showColTitle = F, xTitle = plateTitle, showRowTitle = showRowTitle, yTitle = stat)
       } else {
-        p <- aso:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+        p <- FLIPRTools:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
                                            showRowColLabels = showRowColumnLabels,
                                            maxSatCount = maxSatCount,
                                            showLegend =  showLegend, elementDividers=elementDividers,
@@ -194,7 +194,7 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
     return(NULL)
   }
 
-  loHi <- aso:::getPlateValueCutoffs(plateFormatData, maxSaturationCount = maxSatCount)
+  loHi <- FLIPRTools:::getPlateValueCutoffs(plateFormatData, maxSaturationCount = maxSatCount)
   loEnd <- loHi[1]
   hiEnd <- loHi[2]
   colorLimits = c(loEnd, hiEnd)
@@ -281,11 +281,11 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]
-  tPlate <- aso:::clonePlate(plate)
+  tPlate <- FLIPRTools:::clonePlate(plate)
   tPlate@plateData <- plateSet@transformedPlateData[[1]]
 
   # extract the plate data for a specified sample
-  data <- aso:::getPlateDataForSample(plate = tPlate, sampleName, parameter)
+  data <- FLIPRTools:::getPlateDataForSample(plate = tPlate, sampleName, parameter)
   # concentration should be categorical for bar chart
   data$Concentration <- as.character(data$Concentration)
 
@@ -328,7 +328,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
 #' This method returns a trellis or table of bar chart plots for a set of samples and parameters.
 #' @param plateSet the plateset object containing the data.
-#' @param samples the vector of sample names (compounds, aso ids), for which to pull data.
+#' @param samples the vector of sample names (compounds, FLIPRData ids), for which to pull data.
 #' @param parameters a vector of parameters for which to build plots.
 #' @param samplesIn indicates if samples should be represented as rows or columns.
 #' @param tMethod the transformation method to export
@@ -357,9 +357,9 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
 
 
 #' creates a correlation plot for paramters
-#' @param aso an aso object containing transformed data.
-getParameterCorrelationMatrix <- function(aso) {
-  tPlateData = data.frame(aso@plateSet@transformedPlateData)
+#' @param FLIPRData a FLIPRData object containing transformed data.
+getParameterCorrelationMatrix <- function(FLIPRData) {
+  tPlateData = data.frame(FLIPRData@plateSet@transformedPlateData)
   corrMat <- cor(tPlateData, use = 'pairwise.complete', method = 'pearson')
   corrP <- corrplot::corrplot(tPlateData)
 }

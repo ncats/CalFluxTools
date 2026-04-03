@@ -5,13 +5,13 @@
 \title{A utility method to replace the input AUC parameter name with a new name.
 The original text files contain unicode characters that not not well supported.}
 \usage{
-aucParameterPatch(aso)
+aucParameterPatch(FLIPRData)
 }
 \arguments{
-\item{aso}{the aso object to patch AUC parameter names}
+\item{FLIPRData}{the FLIPRData object to patch AUC parameter names}
 }
 \value{
-returns an aso object with the AUC parameter names patched.
+returns a FLIPRData object with the AUC parameter names patched.
 }
 \description{
 A utility method to replace the input AUC parameter name with a new name.

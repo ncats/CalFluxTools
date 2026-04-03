@@ -3,13 +3,13 @@
 ##' @return plate class object
 ##' @author Andrew Patt
 ##' @export
-read_stemonix_data <- function(filename){
+read_stemonix_data <- function(filename) {
   raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
   raw_data <- strsplit(raw_data,split='\t')[[1]]
-  raw_data <- sapply(raw_data,function(x){
-    if(identical(x,"")){
+  raw_data <- sapply(raw_data,function(x) {
+    if(identical(x,"")) {
       return("Blank")
-    } else{
+    } else {
       return(x)
     }
   })
@@ -32,7 +32,7 @@ read_stemonix_data <- function(filename){
   parsed_plate_list <- list()
   for(i in 1:(length(statistic_dividers)-1)){
     temp_plate <- raw_data[statistic_dividers[i]:(statistic_dividers[i+1]-1)]
-    temp_plate_parsed <- aso:::parse_individual_plate(temp_plate)
+    temp_plate_parsed <- FLIPRTools:::parse_individual_plate(temp_plate)
     parsed_plate_list <- rlist::list.append(parsed_plate_list,temp_plate_parsed)
   }
 
@@ -120,23 +120,22 @@ read_stemonix_metadata <- function(filename, plate){
   return(plate)
 }
 
-#' Reads an input ASO parameter Excel file and returns an aso object.
-#' @param filename excel aso parmeter file
-#' @return returns an aso object ready for analysis. The ASO file will not have plate data but rather just instructions on data
-#' analysis and input data files. This is typically the first function to run to generate an initialized aso object.
+#' Reads an input FLIPRData parameter Excel file and returns a FLIPRData object.
+#' @param filename excel FLIPRData parmeter file
+#' @return returns a FLIPRData object ready for analysis. The FLIPRData file will not have plate data but rather just instructions on data
+#' analysis and input data files. This is typically the first function to run to generate an initialized FLIPRData object.
 #' @export
-readAsoParameterFile <- function(filename) {
+readFLIPRDataParameterFile <- function(filename) {
   paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
   analysisDf <- openxlsx::read.xlsx(filename, sheet="Analysis_Settings", colNames = F)
-  aso <- parseAnalysisSettings(analysisDf)
-  aso@parameterInfo = paramsDf
+  FLIPRData <- parseAnalysisSettings(analysisDf)
+  FLIPRData@parameterInfo = paramsDf
 
-  return(aso)
+  return(FLIPRData)
 }
 
 
 parseAnalysisSettings <- function(analysisDf) {
-
   analysisName = ""
   rootDir = ""
   #create output directory
@@ -146,8 +145,7 @@ parseAnalysisSettings <- function(analysisDf) {
   plateMaps <- list()
   analysisParams <- list()
 
-  aso = new("aso")
-
+  FLIPRData = new("FLIPRData")
   for(i in 1:nrow(analysisDf)) {
     if(analysisDf[i,1] == "Root_Directory") {
       rootDir = trimws(analysisDf[i,2])
@@ -166,7 +164,7 @@ parseAnalysisSettings <- function(analysisDf) {
         } else {
           plateFiles[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,2])
           plateMaps[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,3])
-          aso@outputDirs <- c(aso@outputDirs, trimws(analysisDf[j,5]))
+          FLIPRData@outputDirs <- c(FLIPRData@outputDirs, trimws(analysisDf[j,4]))
         }
       }
     } else if(analysisDf[i,1] == "Processing") {
@@ -186,8 +184,8 @@ parseAnalysisSettings <- function(analysisDf) {
   allParamsList[['plate_file_list']] <- plateFiles
   allParamsList[['plate_map_list']] <- plateMaps
   allParamsList[['analysis_params']] <- analysisParams
-  aso@methodParameters = allParamsList
-  return(aso)
+  FLIPRData@methodParameters = allParamsList
+  return(FLIPRData)
 }
 
 parseProcessingParams <- function(processingDf) {

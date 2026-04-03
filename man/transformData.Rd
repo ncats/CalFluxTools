@@ -4,18 +4,20 @@
 \alias{transformData}
 \title{Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
 This produces a single table that reports on the comparison between the reference or control state
-versus the aso treated state.}
+versus the FLIPRData treated state.}
 \usage{
-transformData(aso)
+transformData(FLIPRData, paired_analysis)
 }
 \arguments{
-\item{aso}{an aso object having plate data (a platepair object) to transform}
+\item{FLIPRData}{a FLIPRData object having plate data (a platepair object) to transform}
+
+\item{paired_analysis}{boolean specifying if plate pairs are used for baseline correction}
 }
 \value{
-an aso object with platepair object now containing the transformed data
+a FLIPRData object with platepair object now containing the transformed data
 }
 \description{
 Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
 This produces a single table that reports on the comparison between the reference or control state
-versus the aso treated state.
+versus the FLIPRData treated state.
 }

@@ -2,13 +2,13 @@
 % Please edit documentation in R/analysis.R
 \name{exportBarCharts}
 \alias{exportBarCharts}
-\title{This function exports a series of barcharts for each ASO and each parameter into a pdf file.}
+\title{This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.}
 \usage{
-exportBarCharts(aso)
+exportBarCharts(FLIPRData)
 }
 \arguments{
-\item{aso}{an aso object having transformed data.}
+\item{FLIPRData}{a FLIPRData object having transformed data.}
 }
 \description{
-This function exports a series of barcharts for each ASO and each parameter into a pdf file.
+This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.
 }

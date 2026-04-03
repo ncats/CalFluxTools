@@ -5,10 +5,10 @@
 \title{Makes sure that the reference plate read and the treatment plate read have the same parameters
 after possibly filtering based on data loss.}
 \usage{
-harmonizeParameters(aso)
+harmonizeParameters(FLIPRData)
 }
 \arguments{
-\item{aso}{the aso object having plate read pairs for comparison}
+\item{FLIPRData}{the FLIPRData object having plate read pairs for comparison}
 }
 \description{
 Makes sure that the reference plate read and the treatment plate read have the same parameters

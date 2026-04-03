@@ -4,13 +4,13 @@
 \alias{setParameterAbbreviaions}
 \title{Method updates parameter abbreviations to those specified in the parameter file}
 \usage{
-setParameterAbbreviaions(aso)
+setParameterAbbreviaions(FLIPRData)
 }
 \arguments{
-\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the aso object with parameter abbreviations set to use for all downstream reports.
+returns the FLIPRData object with parameter abbreviations set to use for all downstream reports.
 }
 \description{
 Method updates parameter abbreviations to those specified in the parameter file

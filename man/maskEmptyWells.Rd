@@ -5,13 +5,13 @@
 \title{Converts well vales to NaN for wells that are annotated in the platemap as "Empty".
 Downstream methods will not be impacted by these well values.}
 \usage{
-maskEmptyWells(aso)
+maskEmptyWells(FLIPRData)
 }
 \arguments{
-\item{aso}{aso object initialized with parameter file, plate data and plate maps loaded.}
+\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the aso object with specified wells masked.
+returns the FLIPRData object with specified wells masked.
 }
 \description{
 Converts well vales to NaN for wells that are annotated in the platemap as "Empty".
