@@ -1200,6 +1200,10 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     dplyr::filter(Compound != "Empty") %>%
     dplyr::filter(Mask != 1)
 
+  data_imputed <-
+    data_imputed %>%
+    dplyr::mutate_all(~ suppressWarnings(as.numeric(.)))
+
   data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
 
   # Build a data table that contains required data (can be updated)
