@@ -5,15 +5,9 @@
 ##' @export
 read_stemonix_data <- function(filename) {
   raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
-  raw_data <- strsplit(raw_data,split='\t')[[1]]
-  raw_data <- sapply(raw_data,function(x) {
-    if(identical(x,"")) {
-      return("Blank")
-    } else {
-      return(x)
-    }
-  })
-  raw_data <- unlist(sapply(raw_data,strsplit,split="\r\n"))
+  raw_data <- unlist(strsplit(raw_data, split = "\r\n|\n"))
+  raw_data <- gsub("\r$", "", raw_data)
+  raw_data <- sub("\t+$", "", raw_data)
   names(raw_data) <- NULL
 
   # Using 'Statistic =' to demarcate our different sections
@@ -30,8 +24,12 @@ read_stemonix_data <- function(filename) {
 
   # Loop through the remaining plates
   parsed_plate_list <- list()
-  for(i in 1:(length(statistic_dividers)-1)){
-    temp_plate <- raw_data[statistic_dividers[i]:(statistic_dividers[i+1]-1)]
+  for(i in 1:length(statistic_dividers)){
+    if(i < length(statistic_dividers)){
+      temp_plate <- raw_data[statistic_dividers[i]:(statistic_dividers[i+1]-1)]
+    } else {
+      temp_plate <- raw_data[statistic_dividers[i]:length(raw_data)]
+    }
     temp_plate_parsed <- FLIPRTools:::parse_individual_plate(temp_plate)
     parsed_plate_list <- rlist::list.append(parsed_plate_list,temp_plate_parsed)
   }
@@ -60,29 +58,68 @@ read_stemonix_data <- function(filename) {
 parse_individual_plate <- function(plate){
   statistic = plate[1]
   statistic = gsub("Statistic = ","",statistic)
+  statistic = trimws(statistic)
 
-  plate_rows <- list()
-  temp_row <- c()
-
-  # Using blank entries to demarcate row beginnings
-  for(i in plate){
-    if(i!=""){
-      temp_row <-c(temp_row,i)
-    }else{
-      plate_rows <- rlist::list.append(plate_rows,temp_row)
-      temp_row <- c()
+  trim_edge_blanks <- function(x){
+    while(length(x) > 0 && x[1] == ""){
+      x <- x[-1]
     }
+    while(length(x) > 0 && tail(x, 1) == ""){
+      x <- x[-length(x)]
+    }
+    return(x)
   }
 
-  # Build wellId vector. Assuming statistic, start sample and end sample
-  # are the only metadata included on the individual plate level
-  wellId_columns <- plate_rows[[1]][6:length(plate_rows[[1]])]
-  wellId_columns <- sapply(wellId_columns,
-                            function(x){ifelse(nchar(x)<2,
-                                               return(paste0("0",x)),
-                                               return(x))})
+  # Some sparse statistic blocks lose their trailing tabs during preprocessing,
+  # leaving rows like "A" or "B" with no tab-delimited values at all.
+  data_row_idx <- grep("^[A-P](\t|$)", plate)
+  if(length(data_row_idx) != 16){
+    stop("Malformed statistic block for ", statistic,
+         ": expected 16 plate rows, found ", length(data_row_idx))
+  }
 
-  wellId_rows <- sapply(plate_rows[2:length(plate_rows)],function(x) return(x[1]))
+  header_idx <- data_row_idx[1] - 1
+  if(header_idx < 1){
+    stop("Malformed statistic block for ", statistic, ": missing column header row")
+  }
+
+  header_fields <- strsplit(plate[header_idx], split = "\t", fixed = TRUE)[[1]]
+  header_fields <- trim_edge_blanks(header_fields)
+  wellId_columns <- sapply(header_fields, function(x){
+    if(nchar(x) < 2){
+      return(paste0("0",x))
+    } else {
+      return(x)
+    }
+  })
+
+  if(length(wellId_columns) != 24){
+    stop("Malformed statistic block for ", statistic,
+         ": expected 24 columns, found ", length(wellId_columns))
+  }
+
+  plate_rows <- lapply(plate[data_row_idx], function(line){
+    fields <- strsplit(line, split = "\t", fixed = TRUE)[[1]]
+
+    row_label <- fields[1]
+    row_values <- fields[-1]
+    expected_values <- length(wellId_columns)
+
+    if(length(row_values) > expected_values){
+      stop("Malformed statistic block for ", statistic,
+           ": expected at most ", expected_values, " values in row ",
+           row_label, ", found ", length(row_values))
+    }
+
+    if(length(row_values) < expected_values){
+      row_values <- c(row_values, rep("", expected_values - length(row_values)))
+    }
+
+    row_values[row_values == ""] <- "Blank"
+    c(row_label, row_values)
+  })
+
+  wellId_rows <- sapply(plate_rows,function(x) return(x[1]))
 
   wellIds <- c()
   for(i in wellId_rows){
@@ -91,11 +128,17 @@ parse_individual_plate <- function(plate){
     }
   }
 
-  plate_rows <- lapply(plate_rows[2:length(plate_rows)], function(x){
+  plate_rows <- lapply(plate_rows, function(x){
     out <- x[-1]
     return(out)
   })
   plate_rows <- unlist(plate_rows)
+
+  if(length(plate_rows) != length(wellIds)){
+    stop("Malformed statistic block for ", statistic,
+         ": expected ", length(wellIds), " values, found ", length(plate_rows))
+  }
+
   out_frame<-data.frame(ids = wellIds, data = plate_rows)
   return(list(statistic,out_frame))
 }
@@ -199,5 +242,3 @@ parseProcessingParams <- function(processingDf) {
   }
   return(params)
 }
-
-

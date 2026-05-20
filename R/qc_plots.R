@@ -276,8 +276,13 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
 #' @param sampleName the sample (compound) to return data for.
 #' @param parameter the parameter for which to return data.
 #' @param tMethod the transoformation method for the transformed data.
-getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio') {
+getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio',
+                                                        showTitle = TRUE, showXAxisTitle = TRUE, showYAxisTitle = TRUE) {
   require('dplyr')
+
+  wrapLabel <- function(x, width = 18) {
+    paste(strwrap(x, width = width), collapse = "\n")
+  }
 
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]
@@ -292,6 +297,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   # set a temp name for the extracted parameter's value
   colnames(data)[ncol(data)] <- 'val'
   data$val <- as.numeric(data$val)
+  data <- data[!is.na(data$Concentration) & data$Concentration != "" & !is.na(data$val), ]
   #compute mean and SD, via dplyr
   dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val, na.rm=T)))
   dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val, na.rm=T)))
@@ -309,16 +315,24 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
   dataSum$SD <- dataSumSD$m
   dataSum$sdLow <- dataSum[,2] - dataSum$SD
   dataSum$sdHigh <- dataSum[,2] + dataSum$SD
+  dataSum <- dataSum[!is.na(dataSum$Concentration) & !is.na(dataSum$m), ]
+  data <- data[data$Concentration %in% dataSum$Concentration, ]
 
-  title <- paste0(sampleName, " -- ", parameter)
+  title <- if (showTitle) paste(sampleName, parameter, sep = "\n") else NULL
+  xAxisTitle <- if (showXAxisTitle) "Concentration" else NULL
+  yAxisTitle <- if (showYAxisTitle) "log2FoldChange" else NULL
   if(any(!is.na(dataSum$Concentration))){
     p <- ggplot2::ggplot(dataSum, ggplot2::aes(x=Concentration, y=dataSum[,2])) +
       ggplot2::geom_bar(stat='identity', color = 'blue', fill=rgb(0.1,0.4,0.5,0.7)) +
       ggplot2::geom_point(data=data, ggplot2::aes(x=Concentration, y=data[,ncol(data)])) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin=sdLow, ymax=sdHigh), width = 0.2) +
-      ggplot2::theme_classic() + ggplot2::labs(title=title, x="Concentration", y="log2FoldChange") +
+      ggplot2::theme_classic() + ggplot2::labs(title=title, x=xAxisTitle, y=yAxisTitle) +
       ggplot2::geom_hline(yintercept = 0.0) +
-      ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(hjust = 0.5, size = 9, lineheight = 0.9),
+        axis.title.x = ggplot2::element_text(size = 8),
+        axis.title.y = ggplot2::element_text(size = 8)
+      )
     
     return(p)
   }else{
@@ -341,17 +355,63 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
 
   samples <- samples[samples != ""]
   samples <- sort(samples)
-  plots <- list()
+  if (length(samples) == 0 || length(parameters) == 0) {
+    return(grid::nullGrob())
+  }
 
-  for(sample in samples) {
-    for(param in parameters) {
-      plotHandle <- paste0(sample, ":", param)
-      p <- getStatisticBarChartFromTransformedPlateSet(plateSet=plateSet, sampleName=sample, parameter = param, tMethod = tMethod)
-      plots[[plotHandle]] <- p
+  wrapLabel <- function(x, width = 18) {
+    paste(strwrap(x, width = width), collapse = "\n")
+  }
+
+  plots <- vector("list", length = length(samples) * length(parameters))
+  idx <- 1
+
+  for (sampleIdx in seq_along(samples)) {
+    sample <- samples[[sampleIdx]]
+    for (paramIdx in seq_along(parameters)) {
+      param <- parameters[[paramIdx]]
+      p <- getStatisticBarChartFromTransformedPlateSet(
+        plateSet = plateSet,
+        sampleName = sample,
+        parameter = param,
+        tMethod = tMethod,
+        showTitle = FALSE,
+        showXAxisTitle = sampleIdx == length(samples),
+        showYAxisTitle = paramIdx == 1
+      )
+      plots[[idx]] <- if (is.null(p)) grid::nullGrob() else p
+      idx <- idx + 1
     }
   }
 
-  grid <- gridExtra::arrangeGrob(grobs=plots, ncol=length(parameters), nrow=length(samples), as.table = T)
+  headerGrobs <- c(
+    list(grid::nullGrob()),
+    lapply(parameters, function(param) {
+      grid::textGrob(wrapLabel(param, width = 18), gp = grid::gpar(fontsize = 9, fontface = "bold"))
+    })
+  )
+
+  rowGrobs <- list()
+  for (sampleIdx in seq_along(samples)) {
+    rowGrobs[[length(rowGrobs) + 1]] <- grid::textGrob(
+      wrapLabel(samples[[sampleIdx]], width = 16),
+      rot = 90,
+      gp = grid::gpar(fontsize = 9, fontface = "bold")
+    )
+    rowStart <- ((sampleIdx - 1) * length(parameters)) + 1
+    rowEnd <- rowStart + length(parameters) - 1
+    rowGrobs <- c(rowGrobs, plots[rowStart:rowEnd])
+  }
+
+  fullGrobs <- c(headerGrobs, rowGrobs)
+  grid <- gridExtra::arrangeGrob(
+    grobs = fullGrobs,
+    ncol = length(parameters) + 1,
+    nrow = length(samples) + 1,
+    widths = c(0.8, rep(4, length(parameters))),
+    heights = c(0.8, rep(4, length(samples))),
+    as.table = TRUE
+  )
   return(grid)
 }
 
@@ -363,6 +423,3 @@ getParameterCorrelationMatrix <- function(FLIPRData) {
   corrMat <- cor(tPlateData, use = 'pairwise.complete', method = 'pearson')
   corrP <- corrplot::corrplot(tPlateData)
 }
-
-
-

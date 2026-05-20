@@ -45,6 +45,9 @@ setClass("FLIPRData", slots=list(
 ))
 
 
+# Register caret's S3 model object for use in S4 slots.
+setOldClass(c("train", "train.formula"))
+
 #' @export
 #' @import caret
 setClass("MachineLearning", slots=list(
@@ -59,6 +62,5 @@ setClass("pcaResult", slots=list(
   controlWellsPCA = "list",
   allWellsPCA = "list"
 ))
-
 
 

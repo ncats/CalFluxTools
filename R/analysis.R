@@ -299,7 +299,7 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # run random forest
   FLIPRData <- FLIPRTools:::FLIPRDataMachineLearning(FLIPRData)
 
-  print("Analyis Done")
+  print("Analysis Done")
 
   # returns the FLIPRData data object
   return(FLIPRData)
@@ -551,7 +551,7 @@ applyDataCoverageFilters <- function(FLIPRData) {
     plate <- plates[[platename]]
     dcov <- dataCoverage[[platename]]
     colsToKeep <- unlist(dcov[dcov$keep, 1])
-    plate@plateData <- plate@plateData[, colsToKeep]
+    plate@plateData <- plate@plateData[, colsToKeep, drop = FALSE]
     plate@paramAbbrs <- colnames(plate@plateData)
     plate@parameters <- dcov$Param_Name[dcov$keep == TRUE]
     plates[[platename]] <- plate
@@ -665,8 +665,18 @@ exportPlateViews <- function(FLIPRData) {
 
     # reports on each pair of plate reads
     if (i %% 2 == 0) {
-      ptoPlot <- 
-        FLIPRTools:::setParameterAbbreviations(FLIPRData)@plateSet@plates[[plateName]]@parameters
+      ptoPlot <- plateSet@plates[[plateNames[1]]]@parameters
+      ptoPlot <- intersect(ptoPlot, plateSet@plates[[plateNames[2]]]@parameters)
+      for (tName in plateSet@transformationNames) {
+        if (nrow(plateSet@transformedPlateData[[tName]]) > 0) {
+          ptoPlot <- intersect(ptoPlot, colnames(plateSet@transformedPlateData[[tName]]))
+        }
+      }
+      if (length(ptoPlot) == 0) {
+        plateNames <- c()
+        i <- i + 1
+        next
+      }
       plotgrid <- trellisPlateSetViewsPairViews(plateSet,
         platePair = plateNames, paramsToPlot = ptoPlot, showRowColumnLabels = F,
         maxSatCount = 10, showLegend = F, tMethod = "log2ratio",
@@ -682,6 +692,10 @@ exportPlateViews <- function(FLIPRData) {
     plateReadLabel = FLIPRData@plateSet@plateNames[1],
     fileExtension = "pdf"
   )
+
+  if (!exists("plotgrid")) {
+    return(invisible(NULL))
+  }
 
   pdf(fileName, height = length(ptoPlot) * 2, width = 8.5)
   gridExtra::grid.arrange(plotgrid)
@@ -754,6 +768,11 @@ runPairedTTest <- function(FLIPRData) {
           refData <- FLIPRTools:::getPlateDataByWellSet(plate = refPlate, wells)
           exptData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, wells)
 
+          if (!is.data.frame(refData) || !is.data.frame(exptData) ||
+              ncol(refData) == 0 || ncol(exptData) == 0) {
+            next
+          }
+
           if (ncol(refData) != ncol(exptData)) {
             next
           }
@@ -766,7 +785,7 @@ runPairedTTest <- function(FLIPRData) {
             data$d2 <- d2
 
             # need to convert to numeric
-            data <- data.frame(lapply(data, FUN = as.numeric))
+            data <- data.frame(lapply(data, FUN = FLIPRTools:::coercePlateValuesToNumeric))
             data <- na.omit(data)
             meanExpt <- mean(data[, 2], na.rm = T) + 0.001
             meanRef <- mean(data[, 1], na.rm = T) + 0.001
@@ -886,7 +905,7 @@ runTTest <- function(FLIPRData) {
           data <- list(d1,d2)
 
           # need to convert to numeric
-          data <- lapply(data, FUN = as.numeric)
+          data <- lapply(data, FUN = FLIPRTools:::coercePlateValuesToNumeric)
           data <- lapply(data,na.omit)
           meanExpt <- mean(data[[2]], na.rm = T) + 0.001
           meanRef <- mean(data[[1]], na.rm = T) + 0.001
@@ -990,11 +1009,11 @@ zFactor <- function(FLIPRData, dataType = "transformed") {
   # unique(NegCtrl$WellType)
 
   # make means and sds data frame for both controls
-  numericPosCtrl <- data.frame(sapply(PosCtrl[, (ncol(plateMap) + 1):ncol(PosCtrl)], as.numeric))
+  numericPosCtrl <- data.frame(sapply(PosCtrl[, (ncol(plateMap) + 1):ncol(PosCtrl)], FLIPRTools:::coercePlateValuesToNumeric))
   allUPosCtrl <- colMeans(numericPosCtrl)
   allSDPosCtrl <- sapply(numericPosCtrl, sd)
 
-  numericNegCtrl <- data.frame(sapply(NegCtrl[, (ncol(plateMap) + 1):ncol(NegCtrl)], as.numeric))
+  numericNegCtrl <- data.frame(sapply(NegCtrl[, (ncol(plateMap) + 1):ncol(NegCtrl)], FLIPRTools:::coercePlateValuesToNumeric))
   allUNegCtrl <- colMeans(numericNegCtrl)
   allSDNegCtrl <- sapply(numericNegCtrl, sd)
 
@@ -1052,6 +1071,18 @@ zFactorXlsx <- function(FLIPRData) {
 runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, scale = T) {
   plateTransformedData <- FLIPRData@plateSet@transformedPlateData
   plateMap <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
+  pcaList <- list()
+
+  failPCA <- function(reason, reducedPlateMap = NULL, parameterNames = NULL) {
+    pcaList[["Wells PCA"]] <- NULL
+    pcaList[["Parameters PCA"]] <- NULL
+    pcaList[["Annotations"]] <- reducedPlateMap
+    pcaList[["Parameter Names"]] <- parameterNames
+    pcaList[["PCA Available"]] <- FALSE
+    pcaList[["PCA Failure Reason"]] <- reason
+
+    return(pcaList)
+  }
 
   if (dataType == "transformed") {
     testData <- plateTransformedData[[length(plateTransformedData)]]
@@ -1081,26 +1112,65 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
   rownames(splicedData) <- splicedData$Well
 
   reducedPlateMap <- splicedData[, 1:ncol(plateMap)]
+  parameterNames <- colnames(testData)
+
+  if (nrow(splicedData) == 0) {
+    return(failPCA("No rows remain after filtering empty, masked, and missing wells.", reducedPlateMap, parameterNames))
+  }
   
   # create dataframe with test data that does not include plate map
   testDataSplice <- splicedData %>% dplyr:::select((ncol(plateMap) + 1):last_col())
   testDataSplice <- na.omit(testDataSplice)
-  testDataSplice <- data.frame(lapply(testDataSplice,as.numeric))
-  testDataSpliceVar <- testDataSplice[, which(apply(testDataSplice, 2, var) != 0)]
-  # transpose
-  testDataSpliceT <- t(testDataSplice[,colSums(is.na(testDataSplice))<nrow(testDataSplice)])
-  # transposition caused columns with zero variance, remove those
-  testDataSpliceTvar <- testDataSpliceT[, which(apply(testDataSpliceT, 2, var) != 0)]
-  pcaFLIPRData <- prcomp(na.omit(as.matrix(testDataSpliceVar)), center = TRUE, scale. = scale, retx = TRUE)
-  pcaFLIPRDataT <- prcomp(na.omit(testDataSpliceTvar), center = TRUE, scale. = scale, retx = TRUE)
+  testDataSplice <- data.frame(lapply(testDataSplice, FLIPRTools:::coercePlateValuesToNumeric))
+  
+  if (ncol(testDataSplice) == 0 || nrow(testDataSplice) == 0) {
+    return(failPCA("No numeric parameter data remain after preprocessing.", reducedPlateMap, parameterNames))
+  }
 
-  pcaList <- list()
+  varianceMask <- apply(testDataSplice, 2, var, na.rm = TRUE)
+  varianceMask[is.na(varianceMask)] <- 0
+  testDataSpliceVar <- testDataSplice[, varianceMask != 0, drop = FALSE]
+
+  # Keep the annotations aligned to the wells that remain after numeric coercion
+  # and complete-case filtering for the wells PCA input matrix.
+  completeWellMask <- complete.cases(testDataSpliceVar)
+  testDataSpliceVarComplete <- testDataSpliceVar[completeWellMask, , drop = FALSE]
+  reducedPlateMap <- reducedPlateMap[completeWellMask, , drop = FALSE]
+  # For the parameter PCA, reuse the complete-case well matrix so incomplete
+  # wells are dropped rather than discarding parameters with any missing value.
+  testDataSpliceT <- t(testDataSpliceVarComplete)
+  # Transposition can still create zero-variance well columns; remove those.
+  if (ncol(testDataSpliceT) == 0 || nrow(testDataSpliceT) == 0) {
+    return(failPCA("No parameter matrix remains after transposition and NA filtering.", reducedPlateMap, parameterNames))
+  }
+
+  varianceMaskT <- apply(testDataSpliceT, 2, var, na.rm = TRUE)
+  varianceMaskT[is.na(varianceMaskT)] <- 0
+  testDataSpliceTvar <- testDataSpliceT[, varianceMaskT != 0, drop = FALSE]
+
+  if (ncol(testDataSpliceVar) == 0) {
+    return(failPCA("All retained parameters have zero variance across selected wells.", reducedPlateMap, parameterNames))
+  }
+
+  if (nrow(testDataSpliceVarComplete) == 0) {
+    return(failPCA("No complete wells remain after numeric coercion and filtering.", reducedPlateMap, parameterNames))
+  }
+
+  if (ncol(testDataSpliceTvar) == 0) {
+    return(failPCA("All wells have zero variance across retained parameters after transposition.", reducedPlateMap, parameterNames))
+  }
+
+  pcaFLIPRData <- prcomp(as.matrix(testDataSpliceVarComplete), center = TRUE, scale. = scale, retx = TRUE)
+  pcaFLIPRDataT <- prcomp(testDataSpliceTvar, center = TRUE, scale. = scale, retx = TRUE)
+
   pcaList[["Wells PCA"]] <- pcaFLIPRData
   pcaList[["Parameters PCA"]] <- pcaFLIPRDataT
 
   # add something in the list to add the annotation
   pcaList[["Annotations"]] <- reducedPlateMap
-  pcaList[["Parameter Names"]] <- colnames(testData)
+  pcaList[["Parameter Names"]] <- parameterNames
+  pcaList[["PCA Available"]] <- TRUE
+  pcaList[["PCA Failure Reason"]] <- NULL
 
   return(pcaList)
 }
@@ -1118,9 +1188,31 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
 plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName = "") {
   plotTitle <- ""
 
+  if (is.null(pcaList) || isFALSE(pcaList[["PCA Available"]])) {
+    reason <- if (is.null(pcaList)) "PCA result is missing." else pcaList[["PCA Failure Reason"]]
+    logger::log_warn("Skipping PCA plot for {dataName}: {reason}")
+    return(NULL)
+  }
+
   maxOverlap <- 10
   if (dataName == "control_wells") {
     maxOverlap <- Inf
+  }
+  labelSize <- 2.0
+  pointSize <- 1.4
+  pointStroke <- 0.2
+  repelBoxPadding <- 0.12
+  repelPointPadding <- 0.08
+  repelMaxTime <- 3
+  repelMaxIter <- 20000
+  if (pcaType == 2) {
+    maxOverlap <- Inf
+    labelSize <- 1.8
+    pointSize <- 1.6
+    repelBoxPadding <- 0.08
+    repelPointPadding <- 0.05
+    repelMaxTime <- 5
+    repelMaxIter <- 40000
   }
 
   if (pcaType == 1) {
@@ -1130,37 +1222,98 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
 
     pca_prop_var <- (pcaList[[pcaType]]$sdev^2 / sum(pcaList[[pcaType]]$sdev^2))
 
-    if (!plotLoadings) {
-      pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = F, label = F)
-
-      if (dataName == "control_wells") {
-        pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label = pcaList$Annotations$Well), max.overlaps = maxOverlap)
-      }
-    } else {
-      pcaProj <- pcaList[[pcaType]]$x
-      pcLoadings <- pcaList[[pcaType]]$rotation
+        if (!plotLoadings) {
+          pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), pcaList$Annotations)
+          pcaPlot <- suppressWarnings(
+            ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = F, label = F)
+          )
+  
+          pcaPlot <- pcaPlot +
+            ggplot2::geom_point(
+              data = pointData,
+              aes(x = PC1, y = PC2, color = Compound),
+              inherit.aes = FALSE,
+              size = pointSize,
+              stroke = pointStroke
+            ) +
+            ggrepel::geom_text_repel(
+              data = pointData,
+              aes(x = PC1, y = PC2, label = Well),
+              inherit.aes = FALSE,
+              size = labelSize,
+              max.overlaps = maxOverlap,
+              box.padding = repelBoxPadding,
+              point.padding = repelPointPadding,
+              min.segment.length = 0,
+              max.time = repelMaxTime,
+              max.iter = repelMaxIter
+            )
+        } else {
+          pcaProj <- pcaList[[pcaType]]$x
+          pcLoadings <- pcaList[[pcaType]]$rotation
 
       xL <- unlist(pcLoadings[, 1])
       yL <- unlist(pcLoadings[, 2])
-      loadData <- data.frame(xL, yL)
+        loadData <- data.frame(xL, yL)
+  
+          pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), pcaList$Annotations)
+          pcaPlot <- suppressWarnings(
+            ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = T, label = F)
+          )
+          pcaPlot <- pcaPlot +
+            ggplot2::geom_point(
+              data = pointData,
+              aes(x = PC1, y = PC2, color = Compound),
+              inherit.aes = FALSE,
+              size = pointSize,
+              stroke = pointStroke
+            ) +
+            ggrepel::geom_text_repel(
+              data = pointData,
+              aes(x = PC1, y = PC2, label = Well),
+              inherit.aes = FALSE,
+              size = labelSize,
+              max.overlaps = maxOverlap,
+              box.padding = repelBoxPadding,
+              point.padding = repelPointPadding,
+              min.segment.length = 0,
+              max.time = repelMaxTime,
+              max.iter = repelMaxIter
+            )
+        }
+      } else {
+      plotTitle <- "Parameters_PCA"
 
-      pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = T, label = F)
-      if (dataName == "control_wells") {
-        pcaPlot <- pcaPlot + ggrepel::geom_text_repel(aes(label = pcaList$Annotations$Well), max.overlaps = maxOverlap)
-      }
+      ## labels <- data.frame(pcaList[["Parameter Names"]])
+      ## colnames(labels) <- "param"
+      labels <- data.frame(param = rownames(pcaList[[pcaType]]$x))
+      pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), labels)
+      
+        pcaPlot <- suppressWarnings(
+          ggplot2::autoplot(pcaList[[pcaType]],
+                                   data = labels,
+                                   color = "param", loadings = F, label = F)
+        ) +
+        ggplot2::geom_point(
+          data = pointData,
+          aes(x = PC1, y = PC2),
+          inherit.aes = FALSE,
+          size = pointSize,
+          stroke = pointStroke
+        ) +
+        ggrepel::geom_text_repel(
+          data = pointData,
+          aes(x = PC1, y = PC2, label = param),
+          inherit.aes = FALSE,
+          size = labelSize,
+          max.overlaps = maxOverlap,
+          box.padding = repelBoxPadding,
+          point.padding = repelPointPadding,
+          min.segment.length = 0,
+          max.time = repelMaxTime,
+          max.iter = repelMaxIter
+        )
     }
-  } else {
-    plotTitle <- "Parameters_PCA"
-
-    ## labels <- data.frame(pcaList[["Parameter Names"]])
-    ## colnames(labels) <- "param"
-    labels <- data.frame(param = rownames(pcaList[[pcaType]]$x))
-    
-    pcaPlot <- ggplot2::autoplot(pcaList[[pcaType]],
-                                 data = labels,
-                                 color = "param", loadings = F, label = F) +
-      ggrepel::geom_text_repel(aes(label = labels$param), max.overlaps = maxOverlap)
-  }
 
   fileName <- paste0(plotTitle, "_", dataName)
   fileName <- FLIPRTools:::constructFileName(baseFileName = fileName, plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
@@ -1193,18 +1346,15 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
   data_imputed <- FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]]
   sample_info <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
 
-  data_imputed <- data_imputed[which(sample_info$Compound != "Empty" & sample_info$Mask != 1), ]
+  data_imputed <- data_imputed[which(sample_info$Compound != "Empty" & sample_info$Mask != 1), , drop = FALSE]
 
   # filter empty wells and masked wells
   sample_info <- sample_info %>%
     dplyr::filter(Compound != "Empty") %>%
     dplyr::filter(Mask != 1)
 
-  data_imputed <-
-    data_imputed %>%
-    dplyr::mutate_all(~ suppressWarnings(as.numeric(.)))
-
-  data_imputed <- data_imputed %>% select_if(~ !any(is.na(.)))
+  data_imputed <- data_imputed %>%
+    select_if(~ !any(is.na(.)))
 
   # Build a data table that contains required data (can be updated)
   # pca_res <- prcomp(data_imputed, scale.=TRUE)
@@ -1251,9 +1401,22 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
 
   cont_training_data <-
     cont_training_data %>%
-    dplyr::mutate_if(is.character,as.numeric)
+    dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+  featureCols <- setdiff(colnames(cont_training_data), "label")
+  featureMissingMask <- colSums(is.na(cont_training_data[, featureCols, drop = FALSE])) == 0
+  cont_training_data <- cbind(
+    cont_training_data[, featureCols[featureMissingMask], drop = FALSE],
+    label = cont_training_data$label
+  )
+  cont_training_data <- cont_training_data[complete.cases(cont_training_data), , drop = FALSE]
   if(length(unique(cont_training_data$label))==1){
     stop("No positive and/or negative controls found. Check the parameter input file for misspellings")
+  }
+  if (nrow(cont_training_data) < 2) {
+    stop("Not enough complete control wells remain after filtering missing values for random forest training.")
+  }
+  if (ncol(cont_training_data) <= 1) {
+    stop("No complete numeric parameters remain after filtering missing values for random forest training.")
   }
 
   # Use a stable seed so repeated runs on the same input produce the same model
@@ -1282,12 +1445,14 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     }
     resampleSeeds[[11]] <- randomSeed + 11
 
-    new_model <- caret::train(label ~ .,
-      data = cont_training_data,
-      method = i,
-      tuneGrid = tunegrid,
-      ntree = ntree,
-      trControl = caret::trainControl(method = "cv", number = 10, seeds = resampleSeeds)
+    new_model <- suppressWarnings(
+      caret::train(label ~ .,
+        data = cont_training_data,
+        method = i,
+        tuneGrid = tunegrid,
+        ntree = ntree,
+        trControl = caret::trainControl(method = "cv", number = 10, seeds = resampleSeeds)
+      )
     )
     # capture model
     ml@model <- new_model
@@ -1304,17 +1469,20 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     # colnames(new_testing_data)[1] = "concentration_labels"
     new_testing_data <- testing_data
 
-    new_testing_data <-
-      new_testing_data %>%
-      dplyr::mutate_if(is.character,as.numeric)
-    # Running the random forest
-    new_test_labels <- stats::predict(new_model, newdata = new_testing_data)
+      new_testing_data <-
+        new_testing_data %>%
+        dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+      trainingFeatureNames <- setdiff(colnames(cont_training_data), "label")
+      new_testing_data <- new_testing_data[, trainingFeatureNames, drop = FALSE]
+      completeTestingRows <- complete.cases(new_testing_data)
+      # Running the random forest
+      new_test_labels <- stats::predict(new_model, newdata = new_testing_data[completeTestingRows, , drop = FALSE])
 
     new_predictions <- data.frame(
       FLIPRData = sample_info$Compound[testing_rows], Concentration = sample_info$Concentration[testing_rows],
       Index = rownames(testing_data)
     )
-    new_test_labels <- data.frame(new_test_labels, Index = names(new_test_labels))
+      new_test_labels <- data.frame(new_test_labels, Index = rownames(new_testing_data)[completeTestingRows])
 
     new_predictions <- new_predictions %>%
       dplyr::left_join(new_test_labels, by = "Index") %>%
@@ -1356,7 +1524,8 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     ml@prediction_sds <- prediction_sd
 
     # Generating Heatmap, exported as pdf
-    pred_heatmap <- ComplexHeatmap::Heatmap(as.matrix(prediction_mean),
+    pred_heatmap <- FLIPRTools:::buildPredictionHeatmap(
+      predictionMatrix = as.matrix(prediction_mean),
       rect_gp = grid::gpar(col = "white", lwd = 2),
       column_title = "Concentration", column_title_side = "bottom", name = "Prediction",
       row_title = "FLIPRData", cluster_rows = FALSE, cluster_columns = FALSE,
@@ -1365,9 +1534,11 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
 
     fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_Heatmap", plateReadLabel = plateName, fileExtension = ".pdf")
 
-    pdf(fileName)
-    print(pred_heatmap)
-    dev.off()
+    if (!is.null(pred_heatmap)) {
+      pdf(fileName)
+      print(pred_heatmap)
+      dev.off()
+    }
 
     # Making the dotplots with error bars, exported as pdf
     pred_plot_mean <- t(prediction_mean) %>% as.data.frame()
@@ -1462,6 +1633,12 @@ evaluateControlWellPCA <- function(FLIPRData) {
   for (id in names(pcaRes)) {
     print(id)
     pca <- pcaRes[[id]]@controlWellsPCA
+
+    if (is.null(pca) || isFALSE(pca[["PCA Available"]])) {
+      reason <- if (is.null(pca)) "PCA result is missing." else pca[["PCA Failure Reason"]]
+      logger::log_warn("Skipping control well PCA evaluation for {id}: {reason}")
+      next
+    }
 
     posCntl <- pca$`Wells PCA`$x[pca$Annotations$WellType == posControlKey, 1]
     negCntl <- pca$`Wells PCA`$x[pca$Annotations$WellType == negControlKey, 1]

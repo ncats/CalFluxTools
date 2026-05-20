@@ -13,6 +13,16 @@ idleLog <- function() {
   logger::log_appender(logger::appender_tee(logFileName))
 }
 
+coercePlateValuesToNumeric <- function(x) {
+  if (is.factor(x)) {
+    x <- as.character(x)
+  }
+  if (is.character(x)) {
+    x[x %in% c("Blank", "N/A", "Masked", "Empty", "")] <- NA_character_
+  }
+  as.numeric(x)
+}
+
 initializedExportLocation <- function(FLIPRData) {
   outDir <- constructFileName(baseFileName = paste0(FLIPRData@methodParameters$analysis_name, "_FLIPRData_Analysis"))
   path <- paste0(getwd(), "/", outDir)
@@ -153,7 +163,7 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   plateAnnot <- plateSet@plates[[1]]@plateAnnotMap
 
   df <- refPlate@plateData
-  df <- sapply(df, as.numeric)
+  df <- sapply(df, coercePlateValuesToNumeric)
   means <- colMeans(na.omit(df))
   sds <- apply(na.omit(df), FUN=sd, MARGIN=2)
   cvs <- sds/means
@@ -305,7 +315,7 @@ imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
   for(plateName in names(plates)) {
     plate <- plates[[plateName]]
     data <- plate@plateData
-    d2 <- sapply(data, FUN=as.numeric, axis=1)
+    d2 <- sapply(data, FUN=coercePlateValuesToNumeric, axis=1)
     d2 <- data.frame(d2)
 
     # does this ignore NaNs
@@ -461,7 +471,7 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
   plateSet@plateNames
   for(name in plateSet@plateNames) {
     plate <- plateSet@plates[[name]]
-    plate@plateData <- plate@plateData[,commonParams]
+    plate@plateData <- plate@plateData[,commonParams, drop = FALSE]
     plate@statList <- colnames(plate@plateData)
     plate@parameters <- commonParamNames
     plateSet@plates[[name]] <- plate
@@ -490,10 +500,10 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
       exptData <- exptPlate@plateData[,firstDataCol:ncol(exptPlate@plateData)]
 
       suppressWarnings(
-      refData <- sapply(refData, 'as.numeric')
+      refData <- sapply(refData, coercePlateValuesToNumeric)
       )
       suppressWarnings(
-      exptData <- sapply(exptData, 'as.numeric')
+      exptData <- sapply(exptData, coercePlateValuesToNumeric)
       )
       tfLabel <- paste0(platePair[2], '_vs_' , platePair[1], '_(', method, ')')
       if(method == 'log2ratio') {
@@ -532,7 +542,7 @@ backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median
 #'
 #' @return returns a matrix with dimensions corresponding to plate type. A01 is in upper left.
 rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
-  plateData <- as.numeric(plate@plateData[,parameter])
+  plateData <- coercePlateValuesToNumeric(plate@plateData[,parameter])
   map = ""
   if(length(plateData) == 384) {
     rc <- getRowAndColumnNames(384)
@@ -552,7 +562,8 @@ rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
 #'
 #' @return Returns a list of plate matrix objects, named by each of the measured parameters in parameter
 rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
-  plateData <- plate@plateData[parameters]
+  parameters <- intersect(parameters, colnames(plate@plateData))
+  plateData <- plate@plateData[, parameters, drop = FALSE]
 
   map = list()
   if(nrow(plateData) == 384) {
@@ -562,9 +573,7 @@ rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
     for(stat in parameters) {
       i = i + 1
       plateFormatData <- data.frame(matrix(unlist(plateData[,i]), ncol=24, nrow=16, byrow = T))
-      suppressWarnings(
-        plateFormatData <- data.frame(lapply(plateFormatData, as.numeric))
-      )
+      plateFormatData <- data.frame(lapply(plateFormatData, coercePlateValuesToNumeric))
       colnames(plateFormatData) <- rc[['cols']]
       rownames(plateFormatData) <- rc[['rows']]
 
@@ -798,7 +807,7 @@ aucParameterPatch <- function(FLIPRData) {
 #' @return returns a dataframe object with all parameter data for the specified wells.
 getPlateDataByWellSet <- function(plate, wellSet) {
   rows <- match(wellSet, plate@wellIds)
-  dataChunk <- plate@plateData[rows,]
+  dataChunk <- plate@plateData[rows,, drop = FALSE]
   return(dataChunk)
 }
 
@@ -987,6 +996,26 @@ normalizePredictionConcentrationColumns <- function(predictionDf) {
   return(predictionDf)
 }
 
+buildPredictionHeatmap <- function(predictionMatrix, ...) {
+  if (is.null(predictionMatrix) || length(predictionMatrix) == 0) {
+    logger::log_warn("Skipping prediction heatmap: matrix is empty.")
+    return(NULL)
+  }
+
+  finiteValues <- predictionMatrix[is.finite(predictionMatrix)]
+  if (length(finiteValues) == 0) {
+    logger::log_warn("Skipping prediction heatmap: matrix has no finite values.")
+    return(NULL)
+  }
+
+  colFun <- circlize::colorRamp2(
+    c(0, 0.5, 1),
+    c("#2166ac", "#f7f7f7", "#b2182b")
+  )
+
+    ComplexHeatmap::Heatmap(predictionMatrix, col = colFun, na_col = "#bdbdbd", ...)
+  }
+
 
 #' Exports prediction heatmaps for each plate read. These are generated based on the FLIPRData classes mlResults slot.
 #' @param FLIPRData The FLIPRData object containing Random Forest result.
@@ -1014,9 +1043,16 @@ exportRfPredictionHeatmaps <- function(FLIPRData) {
   }
   timeLabels <- factor(timeLabels, levels=levels)
 
-  rfhm <- ComplexHeatmap::Heatmap(matrix=as.matrix(rfRes), cluster_rows=F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
-                           column_title_side = "top", column_names_side="top", name = 'Prediction',
-                          row_title = "Exposure", row_names_side="left", column_split = timeLabels, column_gap=unit(5,"mm"))
+  rfhm <- buildPredictionHeatmap(
+    predictionMatrix = as.matrix(rfRes),
+    cluster_rows = F, cluster_columns = F, cluster_column_slices = F, rect_gp = grid::gpar(col = "white", lwd = 2),
+    column_title_side = "top", column_names_side = "top", name = "Prediction",
+    row_title = "Exposure", row_names_side = "left", column_split = timeLabels, column_gap = unit(5, "mm")
+  )
+
+  if (is.null(rfhm)) {
+    return(invisible(NULL))
+  }
 
   fileName <- FLIPRTools:::constructFileName(paste0(FLIPRData@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
                           fileExtension = "pdf")
