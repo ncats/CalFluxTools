@@ -1,9 +1,9 @@
-##' Reads in data from stemonix platform and converts to plate class
+##' Reads in FLIPR data and converts to plate class
 ##' @param filename (string) path to file to read in
 ##' @return plate class object
 ##' @author Andrew Patt
 ##' @export
-read_stemonix_data <- function(filename) {
+read_FLIPR_data <- function(filename) {
   raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
   raw_data <- unlist(strsplit(raw_data, split = "\r\n|\n"))
   raw_data <- gsub("\r$", "", raw_data)
@@ -148,7 +148,7 @@ parse_individual_plate <- function(plate){
 ##' @param plate an initialized plate object
 ##' @return returns a plate with data loaded.
 ##' @author Andrew Patt
-read_stemonix_metadata <- function(filename, plate){
+read_FLIPR_metadata <- function(filename, plate){
   raw_data <- read.csv(filename)
   raw_data$Well <- sapply(raw_data$Well, function(x){
     rownum <- readr::parse_number(x)

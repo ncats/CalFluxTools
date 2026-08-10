@@ -17,7 +17,7 @@ dataTransform(
 \arguments{
 \item{plateSet}{a plateset with at least one reference and one experimental plate}
 
-\item{method}{a transformation method, one of c('log2ratio', 'pct_change')}
+\item{method}{a transformation method, one of c('log2ratio', 'pct_control')}
 
 \item{bkgrdCorr}{a boolean that controls if there is subtraction of median background.}
 }

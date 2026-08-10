@@ -175,11 +175,24 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # this step will optionally apply a mapping or conversion from text values to discrete numeric values.
   FLIPRData <- FLIPRTools:::applyCategoricalToNumeric(FLIPRData)
   
+  print("replace blanks and NAs")
+
+
+  logger::log_info("Imputing/replacing blanks and NAs")
+  # apply optional N/A and blank value replacements
+  # some parameters can have values of 'N/A' or 'Blank'.
+  # The lab has asked for a way to replace these values. The drop-in value or techinque for replacement is specified in the paramter input file.
+  # replacement of these values is optional for each parameter.
+  FLIPRData <- FLIPRTools:::replaceBlanksAndNAValues(FLIPRData)
+  logger::log_success("Finished imputing/replacing blanks and NAs")
+
+
   print("completeness")
 
   logger::log_info("QC for data completeness.")
   # assess data completeness for each parameter. This holds information on how many plate values
-  # are empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
+  # remain empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
+  # after configured blank and N/A replacements have been applied.
   FLIPRData <- FLIPRTools:::assessDataCompleteness(FLIPRData)
   logger::log_success("Finished QC for data completeness.")
 
@@ -200,17 +213,6 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # this method will create an excel file that provides information on the data coverage assessment.
   FLIPRTools:::exportDataCoverageReport(FLIPRData)
 
-  print("impute")
-
-
-  logger::log_info("Imputing/replacing blanks and NAs")
-  # apply optional N/A and blank value replacements
-  # some parameters can have values of 'N/A' or 'Blank'.
-  # The lab has asked for a way to replace these values. The drop-in value or techinque for replacement is specified in the paramter input file.
-  # replacement of these values is optional for each parameter.
-  FLIPRData <- FLIPRTools:::replaceBlanksAndNAValues(FLIPRData)
-  logger::log_success("Finished imputing/replacing blanks and NAs")
-
 
   print("harmonize")
 
@@ -229,10 +231,6 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
     FLIPRData <- FLIPRTools:::runQcForReferencePlate(FLIPRData)
     logger::log_success("Finished reference baseline QA")
   }
-
-  # now impute existing missing data as specified in input parameters
-  # for now, drop standard impute function
-  # FLIPRData <- FLIPRTools:::imputeData(FLIPRData)
 
   print("transform")
 
@@ -318,7 +316,7 @@ loadPlates <- function(FLIPRData) {
 
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
-    plate <- read_stemonix_data(filename = paste0(dir, file))
+    plate <- read_FLIPR_data(filename = paste0(dir, file))
     plateSet <- addPlate(plateSet, plate, platename)
   }
   ## add the plateset
@@ -348,7 +346,7 @@ loadPlateMaps <- function(FLIPRData) {
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
     plate <- FLIPRData@plateSet@plates[[platename]]
-    plate <- FLIPRTools:::read_stemonix_metadata(paste0(dir, file), plate)
+    plate <- FLIPRTools:::read_FLIPR_metadata(paste0(dir, file), plate)
     FLIPRData@plateSet@plates[[platename]] <- plate
   }
 
@@ -595,49 +593,27 @@ runQcForReferencePlate <- function(FLIPRData) {
   return(FLIPRData)
 }
 
-#' Performs missing data imputation, replacing missing data according to a supplied method name.
-#' Note that this method is not currently used in typical pre-processing.
-#' @param FLIPRData a FLIPRData object that has a platepair and processing parameters
-#' @return the FLIPRData object now having missing values imputed
-imputeData <- function(FLIPRData) {
-  params <- FLIPRData@methodParameters$analysis_params
-  impMethod <- params[["Imputation_Method"]]
-  if (impMethod == "per_param_pct_min") {
-    fractionMin <- as.numeric(params[["Imputation_Fraction_Min"]])
-    imputeCols <- FLIPRTools:::getColumnAbbrToImpute(FLIPRData)
-    FLIPRData@plateSet <- FLIPRTools:::imputePercentMin(FLIPRData@plateSet, pctMin = fractionMin, imputeCols)
-  }
-  return(FLIPRData)
-}
-
-#' helper function to determine which parameters should undergo imputation.
-#' @param FLIPRData a FLIPRData object having plate data loaded ans parameters to control the imputation process
-#' @return a list object with two fields incicating which columns to impute for zeros or NAs,
-getColumnAbbrToImpute <- function(FLIPRData) {
-  pInfo <- FLIPRData@parameterInfo
-  zeroReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$Zero_Replace == 1]
-  naReplaceCols <- pInfo$Suggested_Abbreviation[pInfo$NA_Replace == 1]
-  imputeCols <- list()
-  imputeCols[["zero_impute"]] <- zeroReplaceCols
-  imputeCols[["na_impute"]] <- naReplaceCols
-  return(imputeCols)
-}
-
-#' Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
+#' Transforms the plate data using the configured transformation method
 #' This produces a single table that reports on the comparison between the reference or control state
 #' versus the FLIPRData treated state.
 #' @param FLIPRData a FLIPRData object having plate data (a platepair object) to transform
 #' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
 #' @return a FLIPRData object with platepair object now containing the transformed data
 transformData <- function(FLIPRData, paired_analysis) {
-    i <- 1
+  transformationMethod <- FLIPRData@methodParameters$analysis_params$Transformation
+  if (is.null(transformationMethod) || is.na(transformationMethod) || trimws(transformationMethod) == "") {
+    transformationMethod <- "log2ratio"
+  }
+  transformationMethod <- tolower(trimws(transformationMethod))
+
+  i <- 1
   plateNames <- c()
   for (plateName in names(FLIPRData@plateSet@plates)) {
     plate <- FLIPRData@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
     if (paired_analysis) {
       if (i %% 2 == 0) {
-        FLIPRData@plateSet <- dataTransform(FLIPRData@plateSet, platePair = plateNames, method = "log2ratio", firstDataCol = 1)
+        FLIPRData@plateSet <- dataTransform(FLIPRData@plateSet, platePair = plateNames, method = transformationMethod, firstDataCol = 1)
         plateNames <- c()
       }
     } else {
@@ -1107,54 +1083,66 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
 
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != "Empty", ]
   splicedData <- splicedData[splicedData$Mask != 1, ]
-
-  splicedData <- na.omit(splicedData)
   rownames(splicedData) <- splicedData$Well
 
   reducedPlateMap <- splicedData[, 1:ncol(plateMap)]
   parameterNames <- colnames(testData)
 
   if (nrow(splicedData) == 0) {
-    return(failPCA("No rows remain after filtering empty, masked, and missing wells.", reducedPlateMap, parameterNames))
+    return(failPCA("No rows remain after filtering empty and masked wells.", reducedPlateMap, parameterNames))
   }
   
-  # create dataframe with test data that does not include plate map
-  testDataSplice <- splicedData %>% dplyr:::select((ncol(plateMap) + 1):last_col())
-  testDataSplice <- na.omit(testDataSplice)
+  # Match the random forest preprocessing: prefer dropping incomplete feature
+  # columns over dropping wells with any missing exported parameter.
+  testDataSplice <- splicedData[, (ncol(plateMap) + 1):ncol(splicedData), drop = FALSE]
   testDataSplice <- data.frame(lapply(testDataSplice, FLIPRTools:::coercePlateValuesToNumeric))
   
   if (ncol(testDataSplice) == 0 || nrow(testDataSplice) == 0) {
     return(failPCA("No numeric parameter data remain after preprocessing.", reducedPlateMap, parameterNames))
   }
 
-  varianceMask <- apply(testDataSplice, 2, var, na.rm = TRUE)
-  varianceMask[is.na(varianceMask)] <- 0
-  testDataSpliceVar <- testDataSplice[, varianceMask != 0, drop = FALSE]
+  completeFeatureMask <- colSums(is.na(testDataSplice)) == 0
+  droppedFeatureCount <- sum(!completeFeatureMask)
+  if (droppedFeatureCount > 0) {
+    logger::log_info("Dropping {droppedFeatureCount} PCA parameter columns with missing values across selected wells.")
+  }
+  testDataSpliceCompleteFeatures <- testDataSplice[, completeFeatureMask, drop = FALSE]
+  parameterNames <- colnames(testDataSpliceCompleteFeatures)
 
-  # Keep the annotations aligned to the wells that remain after numeric coercion
-  # and complete-case filtering for the wells PCA input matrix.
-  completeWellMask <- complete.cases(testDataSpliceVar)
-  testDataSpliceVarComplete <- testDataSpliceVar[completeWellMask, , drop = FALSE]
+  if (ncol(testDataSpliceCompleteFeatures) == 0) {
+    return(failPCA("No complete numeric parameter columns remain after applying PCA feature completeness filter.", reducedPlateMap, parameterNames))
+  }
+
+  # This is usually all TRUE after the feature filter above, but keeps PCA safe
+  # if numeric coercion or future preprocessing leaves row-level missingness.
+  completeWellMask <- complete.cases(testDataSpliceCompleteFeatures)
+  testDataSpliceCompleteFeatures <- testDataSpliceCompleteFeatures[completeWellMask, , drop = FALSE]
   reducedPlateMap <- reducedPlateMap[completeWellMask, , drop = FALSE]
-  # For the parameter PCA, reuse the complete-case well matrix so incomplete
-  # wells are dropped rather than discarding parameters with any missing value.
+
+  if (nrow(testDataSpliceCompleteFeatures) == 0) {
+    return(failPCA("No complete wells remain after numeric coercion and filtering.", reducedPlateMap, parameterNames))
+  }
+
+  varianceMask <- apply(testDataSpliceCompleteFeatures, 2, var, na.rm = TRUE)
+  varianceMask[is.na(varianceMask)] <- 0
+  testDataSpliceVarComplete <- testDataSpliceCompleteFeatures[, varianceMask != 0, drop = FALSE]
+  parameterNames <- colnames(testDataSpliceVarComplete)
+
+  if (ncol(testDataSpliceVarComplete) == 0) {
+    return(failPCA("All retained parameters have zero variance across selected wells.", reducedPlateMap, parameterNames))
+  }
+
+  # For the parameter PCA, reuse the same complete feature matrix so PCA wells
+  # match the wells plot while incomplete parameters are omitted up front.
   testDataSpliceT <- t(testDataSpliceVarComplete)
-  # Transposition can still create zero-variance well columns; remove those.
   if (ncol(testDataSpliceT) == 0 || nrow(testDataSpliceT) == 0) {
     return(failPCA("No parameter matrix remains after transposition and NA filtering.", reducedPlateMap, parameterNames))
   }
 
+  # Transposition can still create zero-variance well columns; remove those.
   varianceMaskT <- apply(testDataSpliceT, 2, var, na.rm = TRUE)
   varianceMaskT[is.na(varianceMaskT)] <- 0
   testDataSpliceTvar <- testDataSpliceT[, varianceMaskT != 0, drop = FALSE]
-
-  if (ncol(testDataSpliceVar) == 0) {
-    return(failPCA("All retained parameters have zero variance across selected wells.", reducedPlateMap, parameterNames))
-  }
-
-  if (nrow(testDataSpliceVarComplete) == 0) {
-    return(failPCA("No complete wells remain after numeric coercion and filtering.", reducedPlateMap, parameterNames))
-  }
 
   if (ncol(testDataSpliceTvar) == 0) {
     return(failPCA("All wells have zero variance across retained parameters after transposition.", reducedPlateMap, parameterNames))
@@ -1198,16 +1186,15 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
   if (dataName == "control_wells") {
     maxOverlap <- Inf
   }
-  labelSize <- 2.0
+  labelSize <- 4
   pointSize <- 1.4
-  pointStroke <- 0.2
   repelBoxPadding <- 0.12
   repelPointPadding <- 0.08
   repelMaxTime <- 3
   repelMaxIter <- 20000
   if (pcaType == 2) {
     maxOverlap <- Inf
-    labelSize <- 1.8
+    labelSize <- 3.5
     pointSize <- 1.6
     repelBoxPadding <- 0.08
     repelPointPadding <- 0.05
@@ -1215,27 +1202,58 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
     repelMaxIter <- 40000
   }
 
+  maxLegendEntries <- 40
+  pcaColorLegendEntryCount <- 0
+  pcaColorLegendLabel <- "Compound / Concentration"
+
+  makePcaColorGroup <- function(annotationData, includeConcentration = TRUE) {
+    compound <- trimws(as.character(annotationData$Compound))
+    concentration <- trimws(as.character(annotationData$Concentration))
+
+    compound[is.na(compound) | compound == ""] <- "Unannotated"
+    concentration[is.na(concentration) | concentration == ""] <- NA_character_
+
+    colorGroup <- if (!includeConcentration) {
+      compound
+    } else {
+      ifelse(
+        is.na(concentration),
+        compound,
+        paste0(compound, " (", concentration, ")")
+      )
+    }
+
+    factor(colorGroup, levels = unique(colorGroup))
+  }
+
+  assignPcaColorGroup <- function(annotationData) {
+    colorGroup <- makePcaColorGroup(annotationData)
+    pcaColorLegendLabel <<- "Compound / Concentration"
+    pcaColorLegendEntryCount <<- nlevels(colorGroup)
+
+    if (pcaColorLegendEntryCount > maxLegendEntries) {
+      logger::log_warn(
+        "PCA plot for {dataName} has {pcaColorLegendEntryCount} compound/concentration color groups; using compound-only colors."
+      )
+      colorGroup <- makePcaColorGroup(annotationData, includeConcentration = FALSE)
+      pcaColorLegendLabel <<- "Compound"
+      pcaColorLegendEntryCount <<- nlevels(colorGroup)
+    }
+
+    colorGroup
+  }
+
   if (pcaType == 1) {
     plotTitle <- "Wells_PCA"
 
-    labels <- pcaList[["Annotations"]]$Compound
-
     pca_prop_var <- (pcaList[[pcaType]]$sdev^2 / sum(pcaList[[pcaType]]$sdev^2))
+    pcAxisLabels <- paste0(c("PC1", "PC2"), " (", round(pca_prop_var[1:2] * 100, 2), "%)")
 
         if (!plotLoadings) {
           pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), pcaList$Annotations)
-          pcaPlot <- suppressWarnings(
-            ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = F, label = F)
-          )
-  
-          pcaPlot <- pcaPlot +
-            ggplot2::geom_point(
-              data = pointData,
-              aes(x = PC1, y = PC2, color = Compound),
-              inherit.aes = FALSE,
-              size = pointSize,
-              stroke = pointStroke
-            ) +
+          pointData$PcaColorGroup <- assignPcaColorGroup(pointData)
+          pcaPlot <- ggplot2::ggplot(pointData, aes(x = PC1, y = PC2, color = PcaColorGroup)) +
+            ggplot2::geom_point(size = pointSize) +
             ggrepel::geom_text_repel(
               data = pointData,
               aes(x = PC1, y = PC2, label = Well),
@@ -1247,27 +1265,16 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
               min.segment.length = 0,
               max.time = repelMaxTime,
               max.iter = repelMaxIter
-            )
+            ) +
+            ggplot2::labs(x = pcAxisLabels[1], y = pcAxisLabels[2], color = pcaColorLegendLabel)
         } else {
-          pcaProj <- pcaList[[pcaType]]$x
-          pcLoadings <- pcaList[[pcaType]]$rotation
-
-      xL <- unlist(pcLoadings[, 1])
-      yL <- unlist(pcLoadings[, 2])
-        loadData <- data.frame(xL, yL)
-  
-          pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), pcaList$Annotations)
-          pcaPlot <- suppressWarnings(
-            ggplot2::autoplot(pcaList[[pcaType]], data = pcaList$Annotations, color = "Compound", loadings = T, label = F)
-          )
+          pcaAnnotations <- pcaList$Annotations
+          pcaAnnotations$PcaColorGroup <- assignPcaColorGroup(pcaAnnotations)
+          pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), pcaAnnotations)
+            pcaPlot <- suppressWarnings(
+              ggplot2::autoplot(pcaList[[pcaType]], data = pcaAnnotations, scale = 0, color = "PcaColorGroup", loadings = T, label = F)
+            )
           pcaPlot <- pcaPlot +
-            ggplot2::geom_point(
-              data = pointData,
-              aes(x = PC1, y = PC2, color = Compound),
-              inherit.aes = FALSE,
-              size = pointSize,
-              stroke = pointStroke
-            ) +
             ggrepel::geom_text_repel(
               data = pointData,
               aes(x = PC1, y = PC2, label = Well),
@@ -1279,7 +1286,8 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
               min.segment.length = 0,
               max.time = repelMaxTime,
               max.iter = repelMaxIter
-            )
+            ) +
+            ggplot2::labs(color = pcaColorLegendLabel)
         }
       } else {
       plotTitle <- "Parameters_PCA"
@@ -1288,19 +1296,13 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
       ## colnames(labels) <- "param"
       labels <- data.frame(param = rownames(pcaList[[pcaType]]$x))
       pointData <- cbind(as.data.frame(pcaList[[pcaType]]$x[, 1:2, drop = FALSE]), labels)
+      pca_prop_var <- (pcaList[[pcaType]]$sdev^2 / sum(pcaList[[pcaType]]$sdev^2))
+      pcAxisLabels <- paste0(c("PC1", "PC2"), " (", round(pca_prop_var[1:2] * 100, 2), "%)")
       
-        pcaPlot <- suppressWarnings(
-          ggplot2::autoplot(pcaList[[pcaType]],
-                                   data = labels,
-                                   color = "param", loadings = F, label = F)
-        ) +
-        ggplot2::geom_point(
-          data = pointData,
-          aes(x = PC1, y = PC2),
-          inherit.aes = FALSE,
-          size = pointSize,
-          stroke = pointStroke
-        ) +
+      pcaPlot <- ggplot2::ggplot(pointData, aes(x = PC1, y = PC2)) +
+          ggplot2::geom_point(
+            size = pointSize
+          ) +
         ggrepel::geom_text_repel(
           data = pointData,
           aes(x = PC1, y = PC2, label = param),
@@ -1312,8 +1314,18 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
           min.segment.length = 0,
           max.time = repelMaxTime,
           max.iter = repelMaxIter
-        )
+        ) +
+        ggplot2::labs(x = pcAxisLabels[1], y = pcAxisLabels[2])
     }
+
+  pcaPlot <- pcaPlot +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 22),
+      axis.title = ggplot2::element_text(size = 20),
+      axis.text = ggplot2::element_text(size = 18),
+      legend.title = ggplot2::element_text(size = 19),
+      legend.text = ggplot2::element_text(size = 17)
+    )
 
   fileName <- paste0(plotTitle, "_", dataName)
   fileName <- FLIPRTools:::constructFileName(baseFileName = fileName, plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
@@ -1352,9 +1364,6 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
   sample_info <- sample_info %>%
     dplyr::filter(Compound != "Empty") %>%
     dplyr::filter(Mask != 1)
-
-  data_imputed <- data_imputed %>%
-    select_if(~ !any(is.na(.)))
 
   # Build a data table that contains required data (can be updated)
   # pca_res <- prcomp(data_imputed, scale.=TRUE)
@@ -1402,10 +1411,37 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
   cont_training_data <-
     cont_training_data %>%
     dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+
   featureCols <- setdiff(colnames(cont_training_data), "label")
-  featureMissingMask <- colSums(is.na(cont_training_data[, featureCols, drop = FALSE])) == 0
+  trainingFeatures <- cont_training_data[, featureCols, drop = FALSE]
+  featureObservedMask <- colSums(!is.na(trainingFeatures)) > 0
+  droppedFeatureNames <- featureCols[!featureObservedMask]
+  if (length(droppedFeatureNames) > 0) {
+    logger::log_warn(
+      "Dropping {length(droppedFeatureNames)} RF feature columns with no observed control values: {paste(droppedFeatureNames, collapse = ', ')}"
+    )
+  }
+
+  trainingFeatures <- trainingFeatures[, featureObservedMask, drop = FALSE]
+  featureMeans <- vapply(trainingFeatures, function(featureValues) {
+    mean(featureValues, na.rm = TRUE)
+  }, numeric(1))
+
+  missingTrainingCellCount <- sum(is.na(trainingFeatures))
+  if (missingTrainingCellCount > 0) {
+    logger::log_info(
+      "Mean-imputing {missingTrainingCellCount} missing RF control/training values using control feature means."
+    )
+  }
+  for (featureName in names(featureMeans)) {
+    missingRows <- is.na(trainingFeatures[[featureName]])
+    if (any(missingRows)) {
+      trainingFeatures[[featureName]][missingRows] <- featureMeans[[featureName]]
+    }
+  }
+
   cont_training_data <- cbind(
-    cont_training_data[, featureCols[featureMissingMask], drop = FALSE],
+    trainingFeatures,
     label = cont_training_data$label
   )
   cont_training_data <- cont_training_data[complete.cases(cont_training_data), , drop = FALSE]
@@ -1413,10 +1449,10 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     stop("No positive and/or negative controls found. Check the parameter input file for misspellings")
   }
   if (nrow(cont_training_data) < 2) {
-    stop("Not enough complete control wells remain after filtering missing values for random forest training.")
+    stop("Not enough complete control wells remain after mean-imputing missing values for random forest training.")
   }
   if (ncol(cont_training_data) <= 1) {
-    stop("No complete numeric parameters remain after filtering missing values for random forest training.")
+    stop("No numeric parameters with observed control values remain for random forest training.")
   }
 
   # Use a stable seed so repeated runs on the same input produce the same model
@@ -1469,20 +1505,42 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     # colnames(new_testing_data)[1] = "concentration_labels"
     new_testing_data <- testing_data
 
-      new_testing_data <-
-        new_testing_data %>%
-        dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
-      trainingFeatureNames <- setdiff(colnames(cont_training_data), "label")
-      new_testing_data <- new_testing_data[, trainingFeatureNames, drop = FALSE]
-      completeTestingRows <- complete.cases(new_testing_data)
-      # Running the random forest
+    new_testing_data <-
+      new_testing_data %>%
+      dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+    trainingFeatureNames <- setdiff(colnames(cont_training_data), "label")
+    new_testing_data <- new_testing_data[, trainingFeatureNames, drop = FALSE]
+    missingTestingCellCount <- sum(is.na(new_testing_data))
+    if (missingTestingCellCount > 0) {
+      logger::log_info(
+        "Mean-imputing {missingTestingCellCount} missing RF prediction values using control feature means."
+      )
+    }
+    for (featureName in trainingFeatureNames) {
+      missingRows <- is.na(new_testing_data[[featureName]])
+      if (any(missingRows)) {
+        new_testing_data[[featureName]][missingRows] <- featureMeans[[featureName]]
+      }
+    }
+    completeTestingRows <- complete.cases(new_testing_data)
+    if (any(!completeTestingRows)) {
+      skippedWells <- sample_info$Well[testing_rows][!completeTestingRows]
+      logger::log_warn(
+        "Skipping {length(skippedWells)} prediction rows with missing values after RF mean imputation: {paste(skippedWells, collapse = ', ')}"
+      )
+    }
+    # Running the random forest
+    if (any(completeTestingRows)) {
       new_test_labels <- stats::predict(new_model, newdata = new_testing_data[completeTestingRows, , drop = FALSE])
+    } else {
+      new_test_labels <- numeric(0)
+    }
 
     new_predictions <- data.frame(
       FLIPRData = sample_info$Compound[testing_rows], Concentration = sample_info$Concentration[testing_rows],
       Index = rownames(testing_data)
     )
-      new_test_labels <- data.frame(new_test_labels, Index = rownames(new_testing_data)[completeTestingRows])
+    new_test_labels <- data.frame(new_test_labels, Index = rownames(new_testing_data)[completeTestingRows])
 
     new_predictions <- new_predictions %>%
       dplyr::left_join(new_test_labels, by = "Index") %>%
@@ -1553,7 +1611,7 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     pred_plot_sd <- subset(pred_plot_sd, select = -Concentration)
 
 
-    for (i in 1:length(unique(colnames(pred_plot_sd)))) {
+    for (i in seq_along(unique(colnames(pred_plot_sd)))) {
       if (!grepl("sd", colnames(pred_plot_sd)[i])) {
         colnames(pred_plot_sd)[i] <- paste0("sd", colnames(pred_plot_sd)[i])
       }
@@ -1568,7 +1626,7 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     uniqueFLIPRDataNames <- unique(new_predictions$FLIPRData)
 
 
-    for (i in 1:length(uniqueFLIPRDataNames)) {
+    for (i in seq_along(uniqueFLIPRDataNames)) {
       FLIPRDataName <- uniqueFLIPRDataNames[i]
 
       concDotPlot <- ggplot(
@@ -1591,30 +1649,28 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
 
     fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_DotPlot", plateReadLabel = plateName, fileExtension = ".pdf")
 
-    nrows <- floor(length(FLIPRData_plot_list) / 2) + length(FLIPRData_plot_list) %% 2
-    if(nrows < 3){
-      pages <- 1
-    }else{
-      pages <- floor(nrows / 3) + nrows %% 3
-    }
-
-    pdf(fileName)
-    lastToPlot <- 0
-    for (page in 0:(pages - 1)) {
-      firstToPlot <- lastToPlot + 1
-      lastToPlot <- firstToPlot + 5
-      if (lastToPlot > length(FLIPRData_plot_list)) {
-        lastToPlot <- length(FLIPRData_plot_list)
+    if (length(FLIPRData_plot_list) > 0) {
+      pdf(fileName)
+      for (firstToPlot in seq(1, length(FLIPRData_plot_list), by = 6)) {
+        lastToPlot <- min(firstToPlot + 5, length(FLIPRData_plot_list))
+        suppressMessages(do.call(gridExtra::grid.arrange, c(FLIPRData_plot_list[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
       }
-      suppressMessages(do.call(gridExtra::grid.arrange, c(FLIPRData_plot_list[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
+      dev.off()
+    } else {
+      logger::log_warn("Skipping RF prediction dotplot export because no prediction plots were generated.")
     }
-    dev.off()
 
     pred_plot_df <- cbind(pred_plot_mean, pred_plot_sd)
+    importanceTable <- FLIPRTools:::getVariableImportanceTable(new_model)
 
     fileName <- FLIPRTools:::constructFileName(baseFileName = "MachineLearning_Predictions", plateReadLabel = plateName, fileExtension = "xlsx")
 
-    openxlsx::write.xlsx(pred_plot_df,
+    exportTabs <- list(
+      Predictions = pred_plot_df,
+      Variable_Importance = importanceTable
+    )
+
+    openxlsx::write.xlsx(exportTabs,
       file = fileName,
       rowNames = TRUE
     )
@@ -1660,10 +1716,34 @@ evaluateControlWellPCA <- function(FLIPRData) {
 }
 
 plotVariableImportance <- function(model, plateName){
-  importance <- varImp(model, scale = FALSE)
+  importance <- varImp(model, scale = TRUE)
   fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Variable_Importance",
                                              plateReadLabel = plateName, fileExtension = ".pdf")
   pdf(fileName)
   print(plot(importance))
   dev.off()
+}
+
+getVariableImportanceTable <- function(model) {
+  importance <- caret::varImp(model, scale = TRUE)
+  importanceTable <- importance$importance
+
+  if (is.null(importanceTable) || nrow(importanceTable) == 0) {
+    return(data.frame())
+  }
+
+  importanceTable <- data.frame(
+    Parameter = rownames(importanceTable),
+    importanceTable,
+    row.names = NULL,
+    check.names = FALSE
+  )
+
+  scoreCols <- setdiff(colnames(importanceTable), "Parameter")
+  if (length(scoreCols) > 0) {
+    primaryScore <- scoreCols[1]
+    importanceTable <- importanceTable[order(importanceTable[[primaryScore]], decreasing = TRUE), , drop = FALSE]
+  }
+
+  return(importanceTable)
 }

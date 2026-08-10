@@ -284,6 +284,15 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
     paste(strwrap(x, width = width), collapse = "\n")
   }
 
+  orderConcentrationLevels <- function(concentrations) {
+    concentrationLabels <- trimws(as.character(concentrations))
+    concentrationValues <- suppressWarnings(as.numeric(concentrationLabels))
+    uniqueLabels <- unique(concentrationLabels)
+    uniqueValues <- suppressWarnings(as.numeric(uniqueLabels))
+
+    uniqueLabels[order(is.na(uniqueValues), uniqueValues, uniqueLabels)]
+  }
+
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]
   tPlate <- FLIPRTools:::clonePlate(plate)
@@ -296,23 +305,23 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
   # set a temp name for the extracted parameter's value
   colnames(data)[ncol(data)] <- 'val'
-  data$val <- as.numeric(data$val)
+  data$val <- FLIPRTools:::coercePlateValuesToNumeric(data$val)
   data <- data[!is.na(data$Concentration) & data$Concentration != "" & !is.na(data$val), ]
   #compute mean and SD, via dplyr
-  dataSum <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = mean(val, na.rm=T)))
-  dataSumSD <- data.frame(dplyr::group_by(data, Concentration) %>% dplyr::summarize(m = sd(val, na.rm=T)))
+  dataSum <- data.frame(
+    dplyr::group_by(data, Concentration) %>%
+      dplyr::summarize(m = mean(val, na.rm = T), SD = sd(val, na.rm = T), .groups = "drop")
+  )
 
   # set conc as a factor and order levels
-  dataSum$Concentration <- factor(dataSum$Concentration, levels = dataSum$Concentration[order(as.numeric(dataSum$Concentration))])
+  concentrationLevels <- orderConcentrationLevels(dataSum$Concentration)
+  dataSum$Concentration <- factor(dataSum$Concentration, levels = concentrationLevels)
+  data$Concentration <- factor(data$Concentration, levels = concentrationLevels)
 
   # order the data summaries
   dataSum <- dataSum[order(dataSum$Concentration),]
-  dataSumSD <- dataSumSD[order(dataSumSD$Concentration),]
-
-  dataSumSD$Concentration <- factor(dataSumSD$Concentration, levels = dataSumSD$Concentration[order(as.numeric(dataSumSD$Concentration))])
 
   # add sd to the summary and upper and lower limits
-  dataSum$SD <- dataSumSD$m
   dataSum$sdLow <- dataSum[,2] - dataSum$SD
   dataSum$sdHigh <- dataSum[,2] + dataSum$SD
   dataSum <- dataSum[!is.na(dataSum$Concentration) & !is.na(dataSum$m), ]
@@ -370,15 +379,15 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
     sample <- samples[[sampleIdx]]
     for (paramIdx in seq_along(parameters)) {
       param <- parameters[[paramIdx]]
-      p <- getStatisticBarChartFromTransformedPlateSet(
-        plateSet = plateSet,
-        sampleName = sample,
-        parameter = param,
-        tMethod = tMethod,
-        showTitle = FALSE,
-        showXAxisTitle = sampleIdx == length(samples),
-        showYAxisTitle = paramIdx == 1
-      )
+        p <- getStatisticBarChartFromTransformedPlateSet(
+          plateSet = plateSet,
+          sampleName = sample,
+          parameter = param,
+          tMethod = tMethod,
+          showTitle = TRUE,
+          showXAxisTitle = sampleIdx == length(samples),
+          showYAxisTitle = paramIdx == 1
+        )
       plots[[idx]] <- if (is.null(p)) grid::nullGrob() else p
       idx <- idx + 1
     }

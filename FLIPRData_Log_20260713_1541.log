@@ -1,0 +1,5 @@
+INFO [2026-07-13 15:41:00] FLIPRData Analysis Started -- Log Initialized
+INFO [2026-07-13 15:41:00] Reading input parameter excel file ===> /var/folders/7z/x3znsmd13nj_ky3wsbt3_sw4zzmgyq/T//RtmpOINzgw/file46e939f27108.xlsx
+SUCCESS [2026-07-13 15:41:00] Finished reading input parameter excel file
+INFO [2026-07-13 15:41:00] Working directory ==> /Users/pattac/Desktop/FLIPRTools/inst/extdata/Simulated_data//
+INFO [2026-07-13 15:41:00] Loading plate data

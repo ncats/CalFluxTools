@@ -20,7 +20,7 @@ coercePlateValuesToNumeric <- function(x) {
   if (is.character(x)) {
     x[x %in% c("Blank", "N/A", "Masked", "Empty", "")] <- NA_character_
   }
-  as.numeric(x)
+  suppressWarnings(as.numeric(x))
 }
 
 initializedExportLocation <- function(FLIPRData) {
@@ -171,10 +171,14 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
   zDf <- sweep(df,2,means)
   zDf <- sweep(zDf,2,sds, FUN='/')
   zDf <- data.frame(zDf)
+  aggregateZDf <- zDf
+  aggregateZDf[] <- lapply(aggregateZDf, function(x) {
+    x[!is.finite(x)] <- NA_real_
+    x
+  })
 
   colNames = colnames(zDf)
   zMats <- list()
-  aveMat <- ""
 
   for(i in 1:ncol(zDf)) {
     m1 <- data.frame(matrix(zDf[,i], nrow=16, byrow = T))
@@ -182,35 +186,40 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
     rownames(m1) <- LETTERS[1:16]
 
     zMats[[colNames[i]]] <- m1
-
-    if(i == 1) {
-      aveMat <- abs(m1)
-    } else {
-      aveMat <- aveMat + abs(m1)
-    }
   }
 
-  # heres the average absolute z-scored per well
-  aveMat <- aveMat/length(zMats)
+  absAggregateZDf <- abs(aggregateZDf)
 
-  zNcol = ncol(zDf)
+  # heres the average absolute z-scored per well
+  crossParamMean <- rowMeans(absAggregateZDf, na.rm = TRUE)
+  crossParamMean[!is.finite(crossParamMean)] <- NA_real_
+  aveMat <- data.frame(matrix(crossParamMean, nrow=16, byrow = T))
+  colnames(aveMat) <- as.numeric(c(1:24))
+  rownames(aveMat) <- LETTERS[1:16]
+
+  zNcol <- rowSums(!is.na(aggregateZDf))
 
   # add number of parameters that exceed 1SD absolute for each well
-  z1SDsums <- zDf > 1.0 | zDf < -1.0
-  z1SDsums <- rowSums(z1SDsums)
-  z3SDsums <- zDf > 3.0 | zDf < -3.0
-  z3SDsums <- rowSums(z3SDsums)
+  z1SDsums <- rowSums(absAggregateZDf > 1.0, na.rm = TRUE)
+  z3SDsums <- rowSums(absAggregateZDf > 3.0, na.rm = TRUE)
+  z1SDsums[zNcol == 0] <- NA_real_
+  z3SDsums[zNcol == 0] <- NA_real_
 
   # add the median absolute z-score as a column in zDf
-  rowMedians <- apply(abs(zDf), MARGIN = 1, FUN=median)
+  rowMedians <- apply(absAggregateZDf, MARGIN = 1, FUN = function(x) {
+    if (all(is.na(x))) {
+      return(NA_real_)
+    }
+    median(x, na.rm = TRUE)
+  })
   zDf$abs_CV_Median <- unlist(rowMedians)
 
   # add the frequency GT 1SD
   zDf$freq_GT_1SD <- z1SDsums
-  zDf$fract_param_GT_1SD <- signif(zDf$freq_GT_1SD/(zNcol*1.0), digits=3)
+  zDf$fract_param_GT_1SD <- ifelse(zNcol > 0, signif(zDf$freq_GT_1SD/(zNcol*1.0), digits=3), NA_real_)
 
   zDf$freq_GT_3SD <- z3SDsums
-  zDf$fract_param_GT_3SD <- signif(zDf$freq_GT_3SD/(zNcol*1.0), digits=3)
+  zDf$fract_param_GT_3SD <- ifelse(zNcol > 0, signif(zDf$freq_GT_3SD/(zNcol*1.0), digits=3), NA_real_)
 
 
   # make an absolute median plate zscore matrix
@@ -303,58 +312,6 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 }
 
 
-#' This method performs the imputation method on missing data.
-#' This is not typically part of the current data processing steps.
-#' @param plateSet input plateset to work on
-#' @param pctMin take this percentile, input as a fraction, to select the percentile minimum values. Default is 0.01, lowest 1 percent.
-#' @param colsToImpute the set of parameters or parameter abbreviations to impute.
-#' @return returns a plateSet object with imputed data values.
-imputePercentMin <- function(plateSet, pctMin = 0.01, colsToImpute) {
-  plates <- plateSet@plates
-
-  for(plateName in names(plates)) {
-    plate <- plates[[plateName]]
-    data <- plate@plateData
-    d2 <- sapply(data, FUN=coercePlateValuesToNumeric, axis=1)
-    d2 <- data.frame(d2)
-
-    # does this ignore NaNs
-    minVal <- sapply(d2, axix=1, FUN=min, c(na.rm=T))
-
-    for(col in 1:ncol(d2)) {
-      colName <- colnames(d2)[col]
-      d <- na.omit(unlist(d2[,col]))
-      d <- d[d!=0]
-      min <- min(d)
-      repVal <- min * pctMin
-
-      colData <- unlist(d2[,col])
-
-      if(colName %in% colsToImpute$na_impute) {
-        colData[is.na(colData)] <- repVal
-      }
-
-      if(colName %in% colsToImpute$zero_impute) {
-        colData[colData == 0.0] <- repVal
-      }
-
-      d2[,col] <- colData
-    }
-
-    # put the updated plate data back...
-    plate@plateData <- d2
-    plates[[plateName]] <- plate
-  }
-  # drop in the modified plates with mods to plateData
-  plateSet@plates <- plates
-
-  return(plateSet)
-}
-
-
-
-
-
 #' missingDataReport reports on plate missing values
 #' @param plate FLIPRData plate
 #' @param plateSize plate size, e.g. 384 (default)
@@ -400,7 +357,7 @@ calculateParamCV <- function(plate, plateSize = 384) {
   }
   paramCV <- apply(df, 2, function(x){
     filtered <- x[which(x != "Blank" & x != "N/A" & x != "Masked")]
-    filtered <- as.numeric(filtered)
+    filtered <- coercePlateValuesToNumeric(filtered)
     CV <- sd(filtered) / mean(filtered) * 100
   })
   res <- data.frame(Parameter = names(paramCV), CV = paramCV)
@@ -483,12 +440,13 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
 #' Transforms plate data based on a supplied plate set with a reference.
 #'
 #' @param plateSet a plateset with at least one reference and one experimental plate
-#' @param method a transformation method, one of c('log2ratio', 'pct_change')
+#' @param method a transformation method, one of c('log2ratio', 'pct_control')
 #' @param bkgrdCorr a boolean that controls if there is subtraction of median background.
 #'
 #' @return returns a PlateSet object with an additional set of transformed data.
 #' @export
 dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr = F, bkgrdSamples = NULL, bkgrdMode = 'median', firstDataCol = 2) {
+  method <- tolower(trimws(method))
 
   if(length(plateSet@plates) %% 2 == 0 && !is.null(platePair) && length(platePair) == 2) {
 
@@ -512,8 +470,14 @@ dataTransform <- function(plateSet, platePair, method = 'log2ratio', bkgrdCorr =
         tfd <- data.frame(log(exptData/refData,2), check.names = F)
         plateSet@transformedPlateData[[tfLabel]] <- tfd
         plateSet@transformationNames <- c(plateSet@transformationNames, tfLabel)
-      } else if(method == 'pct_change') {
-
+      } else if(method == 'pct_control') {
+        exptData <- exptData + 0.001
+        refData <- refData + 0.001
+        tfd <- data.frame((exptData / refData) * 100, check.names = F)
+        plateSet@transformedPlateData[[tfLabel]] <- tfd
+        plateSet@transformationNames <- c(plateSet@transformationNames, tfLabel)
+      } else {
+        stop("Unsupported transformation method: ", method, ". Use 'log2ratio' or 'pct_control'.")
       }
   }
   return(plateSet)
@@ -1013,7 +977,39 @@ buildPredictionHeatmap <- function(predictionMatrix, ...) {
     c("#2166ac", "#f7f7f7", "#b2182b")
   )
 
-    ComplexHeatmap::Heatmap(predictionMatrix, col = colFun, na_col = "#bdbdbd", ...)
+  heatmapArgs <- list(...)
+  nameGp <- grid::gpar(fontsize = 24)
+  titleGp <- grid::gpar(fontsize = 26.4)
+  legendLabelGp <- grid::gpar(fontsize = 20)
+  legendTitleGp <- grid::gpar(fontsize = 20, fontface = "bold")
+
+  if (is.null(heatmapArgs$row_names_gp)) {
+    heatmapArgs$row_names_gp <- nameGp
+  }
+  if (is.null(heatmapArgs$column_names_gp)) {
+    heatmapArgs$column_names_gp <- nameGp
+  }
+  if (is.null(heatmapArgs$row_title_gp)) {
+    heatmapArgs$row_title_gp <- titleGp
+  }
+  if (is.null(heatmapArgs$column_title_gp)) {
+    heatmapArgs$column_title_gp <- titleGp
+  }
+  if (is.null(heatmapArgs$heatmap_legend_param)) {
+    heatmapArgs$heatmap_legend_param <- list(title_gp = legendTitleGp, labels_gp = legendLabelGp)
+  } else {
+    if (is.null(heatmapArgs$heatmap_legend_param$title_gp)) {
+      heatmapArgs$heatmap_legend_param$title_gp <- legendTitleGp
+    }
+    if (is.null(heatmapArgs$heatmap_legend_param$labels_gp)) {
+      heatmapArgs$heatmap_legend_param$labels_gp <- legendLabelGp
+    }
+  }
+
+  do.call(
+    ComplexHeatmap::Heatmap,
+    c(list(predictionMatrix, col = colFun, na_col = "#bdbdbd"), heatmapArgs)
+  )
   }
 
 

@@ -27,3 +27,7 @@ Imports:
     reshape2,
     rlist,
     scales
+Suggests:
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
