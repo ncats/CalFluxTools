@@ -11,7 +11,7 @@ replaceBlanksAndNAs(plateSet, blankReplacements, naReplacements)
 
 \item{blankReplacements}{a list object with parameter abbreviation keys and replacement values}
 
-\item{naRelacements}{a list object with parameter abbreviations keys and replacement values}
+\item{naReplacements}{a list object with parameter abbreviations keys and replacement values}
 }
 \value{
 a plateset object with plate data replaced according to input values

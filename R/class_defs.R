@@ -1,4 +1,5 @@
 
+#' @importFrom methods new setClass setOldClass
 #' @export
 setClass("plate", slots=list(
   plateId="character",
@@ -35,7 +36,7 @@ setClass("plateset", slots=list(
 )
 
 #' @export
-setClass("FLIPRData", slots=list(
+setClass("CalFluxData", slots=list(
   plateSet = 'plateset',
   parameterInfo = "data.frame",
   methodParameters = "list",
@@ -62,5 +63,4 @@ setClass("pcaResult", slots=list(
   controlWellsPCA = "list",
   allWellsPCA = "list"
 ))
-
 

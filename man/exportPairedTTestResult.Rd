@@ -2,16 +2,17 @@
 % Please edit documentation in R/utility_methods.R
 \name{exportPairedTTestResult}
 \alias{exportPairedTTestResult}
-\title{This function exports a paired t-test result.
- @param FLIPRData a FLIPRData object on which paired ttest has been run
- @param ttestResult a dataframe represenint the ttest result
- @param fileName the t-test result ouput file name.}
+\title{This function exports a paired t-test result.}
 \usage{
-exportPairedTTestResult(FLIPRData, ttestResult, fileName)
+exportPairedTTestResult(CalFluxData, ttestResult, fileName)
+}
+\arguments{
+\item{CalFluxData}{a CalFluxData object on which paired ttest has been run}
+
+\item{ttestResult}{a dataframe representing the ttest result}
+
+\item{fileName}{the t-test result output file name.}
 }
 \description{
 This function exports a paired t-test result.
- @param FLIPRData a FLIPRData object on which paired ttest has been run
- @param ttestResult a dataframe represenint the ttest result
- @param fileName the t-test result ouput file name.
 }

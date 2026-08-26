@@ -17,9 +17,17 @@ dataTransform(
 \arguments{
 \item{plateSet}{a plateset with at least one reference and one experimental plate}
 
+\item{platePair}{a vector of plate names to compare}
+
 \item{method}{a transformation method, one of c('log2ratio', 'pct_control')}
 
 \item{bkgrdCorr}{a boolean that controls if there is subtraction of median background.}
+
+\item{bkgrdSamples}{optional sample names to use for background correction}
+
+\item{bkgrdMode}{background summary mode, currently median by default}
+
+\item{firstDataCol}{first column in plate data containing numeric response values}
 }
 \value{
 returns a PlateSet object with an additional set of transformed data.

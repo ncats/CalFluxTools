@@ -4,10 +4,10 @@
 \alias{exportMachineLearningResults}
 \title{Exports a colelction of random forest results into one file, along with Benchmark Dose.}
 \usage{
-exportMachineLearningResults(FLIPRData)
+exportMachineLearningResults(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{The FLIPRData object containing the MachineLearning Results}
+\item{CalFluxData}{The CalFluxData object containing the MachineLearning Results}
 }
 \description{
 Exports a colelction of random forest results into one file, along with Benchmark Dose.

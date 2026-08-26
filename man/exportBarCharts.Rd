@@ -2,13 +2,13 @@
 % Please edit documentation in R/analysis.R
 \name{exportBarCharts}
 \alias{exportBarCharts}
-\title{This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.}
+\title{This function exports a series of barcharts for each CalFluxData and each parameter into a pdf file.}
 \usage{
-exportBarCharts(FLIPRData)
+exportBarCharts(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{a FLIPRData object having transformed data.}
+\item{CalFluxData}{a CalFluxData object having transformed data.}
 }
 \description{
-This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.
+This function exports a series of barcharts for each CalFluxData and each parameter into a pdf file.
 }

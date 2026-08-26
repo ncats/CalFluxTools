@@ -12,7 +12,7 @@
 
 
 
-<title>Using the FLIPRTools Example Data</title>
+<title>Using the CalFluxTools Example Data</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -337,32 +337,32 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Using the FLIPRTools Example Data</h1>
+<h1 class="title toc-ignore">Using the CalFluxTools Example Data</h1>
 
 
 
-<p>FLIPRTools provides a workflow for parsing, quality-controlling,
-visualizing, transforming, and analyzing FLIPR plate-reader data. It
-parses FLIPR data in the <code>statAll</code> format together with plate
+<p>CalFluxTools provides a workflow for parsing, quality-controlling,
+visualizing, transforming, and analyzing calcium flux plate-reader data. It
+parses calcium flux data in the <code>statAll</code> format together with plate
 maps and a parameter manifest, organizes the data into plate and
 plate-set objects, applies processing rules such as masking, parameter
 filtering, categorical encoding, blank or missing-value replacement, and
 baseline-normalized transformations, and supports downstream outputs
 including data completeness reports, plate heatmaps, bar charts, z-prime
 factor summaries, PCA, and random-forest classification results.</p>
-<p>This vignette walks through the analysis of example FLIPR files
-distributed with FLIPRTools. The package includes plate-reader output
+<p>This vignette walks through the analysis of example calcium flux files
+distributed with CalFluxTools. The package includes plate-reader output
 files in <code>statAll</code> format, matching plate maps, and Excel
 parameter manifests under <code>inst/extdata</code>.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(FLIPRTools)</span>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(CalFluxTools)</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span></code></pre></div>
 <div id="locate-the-example-files" class="section level2">
 <h2>Locate the Example Files</h2>
 <p>Use <code>system.file()</code> to locate packaged data after
-FLIPRTools has been installed. The helper below also works when knitting
+CalFluxTools has been installed. The helper below also works when knitting
 this vignette from the source tree.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>example_file <span class="ot">&lt;-</span> <span class="cf">function</span>(...) {</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  installed_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata&quot;</span>, ..., <span class="at">package =</span> <span class="st">&quot;FLIPRTools&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  installed_path <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata&quot;</span>, ..., <span class="at">package =</span> <span class="st">&quot;CalFluxTools&quot;</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">nzchar</span>(installed_path)) {</span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>    <span class="fu">return</span>(installed_path)</span>
 <span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  }</span>
@@ -376,7 +376,7 @@ this vignette from the source tree.</p>
 <span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">normalizePath</span>(existing_paths[[<span class="dv">1</span>]], <span class="at">mustWork =</span> <span class="cn">TRUE</span>))</span>
 <span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  }</span>
 <span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a></span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="st">&quot;Could not locate FLIPRTools example data.&quot;</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="st">&quot;Could not locate CalFluxTools example data.&quot;</span>)</span>
 <span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>}</span>
 <span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a></span>
 <span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>simulated_dir <span class="ot">&lt;-</span> <span class="fu">example_file</span>(<span class="st">&quot;Simulated_data&quot;</span>)</span>
@@ -384,12 +384,12 @@ this vignette from the source tree.</p>
 <span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a></span>
 <span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="fu">list.files</span>(simulated_dir)</span>
 <span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co">#&gt; [1] &quot;Control_Plate_map_1_PC3_New_T2.csv&quot;                           &quot;Control_plate1_Test1_30min_n001_Pro2_New_T1.statAll&quot;         </span></span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt; [3] &quot;Control_plate1_Test1_BL_n001_Pro2_New_T1.statAll&quot;             &quot;FLIPR_Parameter_selection_Control_PC3_New_T5.xlsx&quot;           </span></span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt; [5] &quot;FLIPRData_Log_20260714_1711.log&quot;                              &quot;FLIPRData_Log_20260714_1715.log&quot;                             </span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt; [7] &quot;Updated_Control_PC3_New_T5_FLIPRData_Analysis_20260714_1715.&quot;</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt; [3] &quot;Control_plate1_Test1_BL_n001_Pro2_New_T1.statAll&quot;             &quot;CalFlux_Parameter_selection_Control_PC3_New_T5.xlsx&quot;           </span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt; [5] &quot;CalFluxData_Log_20260714_1711.log&quot;                              &quot;CalFluxData_Log_20260714_1715.log&quot;                             </span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt; [7] &quot;Updated_Control_PC3_New_T5_CalFluxData_Analysis_20260714_1715.&quot;</span></span>
 <span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="fu">list.files</span>(stemonix_dir)</span>
 <span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co">#&gt; [1] &quot;05272022_Stemonix_plate3_60mins_n001_Pro2.statAll&quot; &quot;05272022_Stemonix_plate3_BL_n001_Pro2.statAll&quot;    </span></span>
-<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt; [3] &quot;FLIPR_Parameter_selection_MOE9_60_PC.xlsx&quot;         &quot;Stemonix_MOE9_60_PC_ON2_Full.csv&quot;</span></span></code></pre></div>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt; [3] &quot;CalFlux_Parameter_selection_MOE9_60_PC.xlsx&quot;         &quot;Stemonix_MOE9_60_PC_ON2_Full.csv&quot;</span></span></code></pre></div>
 <p>The simulated dataset contains one baseline read, one post-dose read,
 one plate map, and one manifest describing the intended analysis
 parameters. This enables us to use the “paired analysis” pipeline
@@ -408,7 +408,7 @@ provided by the package.</p>
 <span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>)</span>
 <span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>parameter_file <span class="ot">&lt;-</span> <span class="fu">example_file</span>(</span>
 <span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>  <span class="st">&quot;Simulated_data&quot;</span>,</span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  <span class="st">&quot;FLIPR_Parameter_selection_Control_PC3_New_T5.xlsx&quot;</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  <span class="st">&quot;CalFlux_Parameter_selection_Control_PC3_New_T5.xlsx&quot;</span></span>
 <span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="inspect-the-parameter-manifest" class="section level2">
@@ -666,26 +666,26 @@ directory and the filenames distributed with the package.</p>
 <span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a>)</span>
 <span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a>openxlsx<span class="sc">::</span><span class="fu">saveWorkbook</span>(manifest, patched_parameter_file, <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a></span>
-<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a>flipr_data <span class="ot">&lt;-</span> <span class="fu">processFLIPRData</span>(patched_parameter_file)</span></code></pre></div>
+<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a>calflux_data <span class="ot">&lt;-</span> <span class="fu">processCalFluxData</span>(patched_parameter_file)</span></code></pre></div>
 <p>Although it is easiest to run the package using the
-<code>processFLIPRData</code> function, lower-level functions are also
+<code>processCalFluxData</code> function, lower-level functions are also
 available for data parsing, transformation and visualization.</p>
 </div>
 <div id="parse-plate-reads" class="section level2">
 <h2>Parse Plate Reads</h2>
-<p>Use <code>read_FLIPR_data()</code> to parse each <code>statAll</code>
+<p>Use <code>read_calflux_data()</code> to parse each <code>statAll</code>
 file into a <code>plate</code> S4 object. The metadata reader used by
 the package is currently internal, so this example uses
-<code>FLIPRTools:::</code> to attach the plate map in the same way as
+<code>CalFluxTools:::</code> to attach the plate map in the same way as
 the analysis wrapper.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>baseline_plate <span class="ot">&lt;-</span> <span class="fu">read_FLIPR_data</span>(baseline_file)</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>postdose_plate <span class="ot">&lt;-</span> <span class="fu">read_FLIPR_data</span>(postdose_file)</span>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>baseline_plate <span class="ot">&lt;-</span> <span class="fu">read_calflux_data</span>(baseline_file)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>postdose_plate <span class="ot">&lt;-</span> <span class="fu">read_calflux_data</span>(postdose_file)</span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>baseline_plate <span class="ot">&lt;-</span> FLIPRTools<span class="sc">:::</span><span class="fu">read_FLIPR_metadata</span>(</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>baseline_plate <span class="ot">&lt;-</span> CalFluxTools<span class="sc">:::</span><span class="fu">read_calflux_metadata</span>(</span>
 <span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  plate_map_file,</span>
 <span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  baseline_plate</span>
 <span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>)</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>postdose_plate <span class="ot">&lt;-</span> FLIPRTools<span class="sc">:::</span><span class="fu">read_FLIPR_metadata</span>(</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>postdose_plate <span class="ot">&lt;-</span> CalFluxTools<span class="sc">:::</span><span class="fu">read_calflux_metadata</span>(</span>
 <span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  plate_map_file,</span>
 <span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  postdose_plate</span>
 <span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>)</span>
@@ -1053,7 +1053,7 @@ object.</p>
 <h2>Transform the Plate Pair</h2>
 <p>Create a <code>plateset</code>, add the baseline and post-dose
 plates, then compute the log2 ratio for each parameter. Because
-<code>read_FLIPR_data()</code> retains <code>well_id</code> as the first
+<code>read_calflux_data()</code> retains <code>well_id</code> as the first
 column, set <code>firstDataCol = 2</code>.</p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>plate_set <span class="ot">&lt;-</span> <span class="fu">new</span>(<span class="st">&quot;plateset&quot;</span>)</span>
 <span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>plate_set <span class="ot">&lt;-</span> <span class="fu">addPlate</span>(plate_set, baseline_plate, <span class="st">&quot;Baseline&quot;</span>)</span>
@@ -1210,7 +1210,7 @@ paths:</p>
 <td align="left">05272022_Stemonix_plate3_BL_n001_Pro2.statAll</td>
 </tr>
 <tr class="odd">
-<td align="left">FLIPR_Parameter_selection_MOE9_60_PC.xlsx</td>
+<td align="left">CalFlux_Parameter_selection_MOE9_60_PC.xlsx</td>
 </tr>
 <tr class="even">
 <td align="left">Stemonix_MOE9_60_PC_ON2_Full.csv</td>
@@ -1218,7 +1218,7 @@ paths:</p>
 </tbody>
 </table>
 <p>For full report generation, use a patched manifest with
-<code>processFLIPRData()</code>. For focused exploratory work, parse the
+<code>processCalFluxData()</code>. For focused exploratory work, parse the
 <code>statAll</code> files, attach the plate map, and call the
 lower-level QC and transformation helpers shown above.</p>
 </div>

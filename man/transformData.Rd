@@ -2,22 +2,22 @@
 % Please edit documentation in R/analysis.R
 \name{transformData}
 \alias{transformData}
-\title{Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
+\title{Transforms the plate data using the configured transformation method
 This produces a single table that reports on the comparison between the reference or control state
-versus the FLIPRData treated state.}
+versus the CalFluxData treated state.}
 \usage{
-transformData(FLIPRData, paired_analysis)
+transformData(CalFluxData, paired_analysis)
 }
 \arguments{
-\item{FLIPRData}{a FLIPRData object having plate data (a platepair object) to transform}
+\item{CalFluxData}{a CalFluxData object having plate data (a platepair object) to transform}
 
 \item{paired_analysis}{boolean specifying if plate pairs are used for baseline correction}
 }
 \value{
-a FLIPRData object with platepair object now containing the transformed data
+a CalFluxData object with platepair object now containing the transformed data
 }
 \description{
-Transforms the plate data, currently taking a log base 2 transformation of the ratio of the data
+Transforms the plate data using the configured transformation method
 This produces a single table that reports on the comparison between the reference or control state
-versus the FLIPRData treated state.
+versus the CalFluxData treated state.
 }

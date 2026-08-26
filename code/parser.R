@@ -5,6 +5,6 @@
 ##' @param filename (string) path to file to read in
 ##' @return 
 ##' @author Andrew Patt
-read_FLIPR_data <- function(filename){
+read_calflux_data <- function(filename){
   raw_data <- read.table(filename,fill=TRUE)
 }

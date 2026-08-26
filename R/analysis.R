@@ -1,33 +1,33 @@
 # The analysis.R file contains the high level method that makes calls on other methods for
-# processing data and providing QC analyses. The buildAndProcessFLIPRDatas() method sequentially calls
-# methods that process FLIPRData data according to an input file that specifies all methods.
+# processing data and providing QC analyses. The buildAndProcessCalFluxDataObjects() method sequentially calls
+# methods that process CalFluxData data according to an input file that specifies all methods.
 
 
-#' This method is a convenience method that displays a file chooser for selecting a FLIPRData Paramter Excel file for processing.
+#' This method is a convenience method that displays a file chooser for selecting a CalFluxData Paramter Excel file for processing.
 #' The method will run data procesing and output diagnostic plots and tables.
-#' @returns Returns a FLIPRData object containing analysis parameters from the parameter file, input, refined and transformed plate data.
+#' @returns Returns a CalFluxData object containing analysis parameters from the parameter file, input, refined and transformed plate data.
 #' @export
 processData <- function() {
   file <- file.choose()
-  FLIPRTools:::processFLIPRData(file)
+  processCalFluxData(file)
 }
 
 #' Wrapper method to process a data set possibly containing multiple file paires
-#' processes data, writes file outputs, returns a FLIPRData object with processed data.
-#' @param FLIPRDataParameterXlsxFilePath file path to param file
-#' @returns processed FLIPRData object
+#' processes data, writes file outputs, returns a CalFluxData object with processed data.
+#' @param CalFluxDataParameterXlsxFilePath file path to param file
+#' @returns processed CalFluxData object
 #' @export
-processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
-  FLIPRTools:::initializeLog(logLevel = "TRACE")
+processCalFluxData <- function(CalFluxDataParameterXlsxFilePath) {
+  initializeLog(logLevel = "TRACE")
 
-  logger::log_info(paste0("Reading input parameter excel file ===> ", FLIPRDataParameterXlsxFilePath))
-  # parse parameter and analysis settings, builds initial FLIPRData object.
-  FLIPRData <- FLIPRTools:::readFLIPRDataParameterFile(FLIPRDataParameterXlsxFilePath)
+  logger::log_info(paste0("Reading input parameter excel file ===> ", CalFluxDataParameterXlsxFilePath))
+  # parse parameter and analysis settings, builds initial CalFluxData object.
+  CalFluxData <- readCalFluxDataParameterFile(CalFluxDataParameterXlsxFilePath)
   logger::log_success("Finished reading input parameter excel file")
 
   # set the root dir as the working directory
   origDir <- getwd()
-  rootDir <- FLIPRData@methodParameters[["root_dir"]]
+  rootDir <- CalFluxData@methodParameters[["root_dir"]]
 
   logger::log_info(paste0("Working directory ==> ", rootDir))
   setwd(paste0(rootDir))
@@ -35,28 +35,28 @@ processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
   logger::log_info("Loading plate data")
   # loads the list of plate files specified in the parameter file and create file pairs
   # creating a plate set
-  FLIPRData <- FLIPRTools:::loadPlates(FLIPRData)
+  CalFluxData <- loadPlates(CalFluxData)
   logger::log_success("Finished loading plate data")
 
   logger::log_info("Loading plate map well annotations")
-  FLIPRData <- FLIPRTools:::loadPlateMaps(FLIPRData)
+  CalFluxData <- loadPlateMaps(CalFluxData)
   logger::log_success("Finished loading plate map well annotations")
 
-  # the FLIPRData has all plate pairs specified
+  # the CalFluxData has all plate pairs specified
   # loop through all plate pairs in the plate set.
-  numberOfPlates <- length(FLIPRData@plateSet@plates)
+  numberOfPlates <- length(CalFluxData@plateSet@plates)
   logger::log_info(paste0("Number of plate pairs to process: ", numberOfPlates / 2))
 
   logger::log_info("Initialize export directory...")
-  outDir <- FLIPRTools:::initializedExportLocation(FLIPRData)
+  outDir <- initializedExportLocation(CalFluxData)
   logger::log_success(paste0("Initialized export directory... ", outDir))
 
   platePairIndex <- 1
-  paired_analysis <- FLIPRData@methodParameters$analysis_params$Paired_Analysis == "TRUE"
+  paired_analysis <- CalFluxData@methodParameters$analysis_params$Paired_Analysis == "TRUE"
   for (i in 1:numberOfPlates) {
     if (i %% 2 == 1 | !paired_analysis) {
       # set the ouput dir
-      currentOutDir <- paste0(outDir, "/", FLIPRData@outputDirs[[i]])
+      currentOutDir <- paste0(outDir, "/", CalFluxData@outputDirs[[i]])
       if (!dir.exists(currentOutDir)) {
         dir.create(currentOutDir)
       }
@@ -67,60 +67,60 @@ processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
       logger::log_info("###############")
       logger::log_info(paste0("Processing plate pair: ", platePairIndex))
       logger::log_info(paste0("Output directory: ", currentOutDir))
-      newFLIPRData <- FLIPRData
-      newFLIPRData@pcaResults <- list()
-      newFLIPRData@mlResults <- list()
-      # assign(x="newFLIPRData", value=FLIPRData)
+      newCalFluxData <- CalFluxData
+      newCalFluxData@pcaResults <- list()
+      newCalFluxData@mlResults <- list()
+      # assign(x="newCalFluxData", value=CalFluxData)
 
-      # check to see if we have a copy of our FLIPRData object
-      # print("Don't have FLIPRData copy????")
-      # if(tracemem(newFLIPRData) == tracemem(FLIPRData)) {
-      #   print("Same FLIPRData")
-      #   print(tracemem(newFLIPRData))
-      #   print(tracemem(FLIPRData))
+      # check to see if we have a copy of our CalFluxData object
+      # print("Don't have CalFluxData copy????")
+      # if(tracemem(newCalFluxData) == tracemem(CalFluxData)) {
+      #   print("Same CalFluxData")
+      #   print(tracemem(newCalFluxData))
+      #   print(tracemem(CalFluxData))
       # } else {
-      #   print("Different FLIPRData")
+      #   print("Different CalFluxData")
       # }
       if (paired_analysis) {
         keepers <- c(i, i + 1)
       } else {
         keepers <- i
       }
-      newPlateSet <- subsetPlateSet(newFLIPRData@plateSet, plateIndicesToKeep = keepers)
+      newPlateSet <- subsetPlateSet(newCalFluxData@plateSet, plateIndicesToKeep = keepers)
 
-      newFLIPRData@plateSet <- newPlateSet
+      newCalFluxData@plateSet <- newPlateSet
 
-      # print("FLIPRData and newFLIPRData plate count")
-      # print(length(FLIPRData@plateSet@plates))
-      # print(length(newFLIPRData@plateSet@plates))
+      # print("CalFluxData and newCalFluxData plate count")
+      # print(length(CalFluxData@plateSet@plates))
+      # print(length(newCalFluxData@plateSet@plates))
       #
       # print("plate names for this iteration:")
-      # print(newFLIPRData@plateSet@plateNames)
+      # print(newCalFluxData@plateSet@plateNames)
 
       # print("number of transformed data frames and t names")
-      # print(length(FLIPRData@plateSet@transformedPlateData))
-      # print(length(FLIPRData@plateSet@transformationNames))
+      # print(length(CalFluxData@plateSet@transformedPlateData))
+      # print(length(CalFluxData@plateSet@transformationNames))
       #
       #       print("Running a processing iteration, iter = plate read count...")
       #       print(i)
-      #       print(length(newFLIPRData@plateSet@plates))
-      newFLIPRData <- runDataProcessing(newFLIPRData, paired_analysis)
+      #       print(length(newCalFluxData@plateSet@plates))
+      newCalFluxData <- runDataProcessing(newCalFluxData, paired_analysis)
       # Preserve the original transformation label from the processed pair so
       # later analyses can distinguish timepoints correctly in the full object.
-      for (tfName in names(newFLIPRData@plateSet@transformedPlateData)) {
-        FLIPRData@plateSet@transformedPlateData[[tfName]] <- newFLIPRData@plateSet@transformedPlateData[[tfName]]
+      for (tfName in names(newCalFluxData@plateSet@transformedPlateData)) {
+        CalFluxData@plateSet@transformedPlateData[[tfName]] <- newCalFluxData@plateSet@transformedPlateData[[tfName]]
       }
 
       # collect PCA Result
-      pcaResultList <- newFLIPRData@pcaResults
+      pcaResultList <- newCalFluxData@pcaResults
       for (id in names(pcaResultList)) {
-        FLIPRData@pcaResults[[id]] <- pcaResultList[[id]]
+        CalFluxData@pcaResults[[id]] <- pcaResultList[[id]]
       }
 
       # collect Random Forest Result
-      rfResultList <- newFLIPRData@mlResults
+      rfResultList <- newCalFluxData@mlResults
       for (id in names(rfResultList)) {
-        FLIPRData@mlResults[[id]] <- rfResultList[[id]]
+        CalFluxData@mlResults[[id]] <- rfResultList[[id]]
       }
 
       platePairIndex <- platePairIndex + 1
@@ -129,34 +129,34 @@ processFLIPRData <- function(FLIPRDataParameterXlsxFilePath) {
 
   setwd("..")
 
-  FLIPRTools:::exportMachineLearningResults(FLIPRData)
-  FLIPRTools:::exportRfPredictionHeatmaps(FLIPRData)
+  exportMachineLearningResults(CalFluxData)
+  exportRfPredictionHeatmaps(CalFluxData)
 
   setwd(origDir)
 
   # stop pointing to this analysis log
-  FLIPRTools:::idleLog()
+  idleLog()
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
-#' This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
+#' This method is a wrapper method that performs all data processing operations according to the supplied CalFluxData Parameter File.
 #' The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.
-#' @param FLIPRDataParamterXlsxFilePath a file path and file name for the FLIPRData parameter xlsx file. All information required to process FLIPRData data is contained in this file.
+#' @param CalFluxData a CalFluxData object with loaded plate data and analysis settings.
 #' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
-#' @returns Returns a FLIPRData objecdt with loaded and transformed data. During processing several output summary files will be exported.
+#' @returns Returns a CalFluxData objecdt with loaded and transformed data. During processing several output summary files will be exported.
 #' @export
-runDataProcessing <- function(FLIPRData, paired_analysis) {
+runDataProcessing <- function(CalFluxData, paired_analysis) {
   logger::log_info("Starting Data Processing and Analysis methods")
 
   # AUC parameter names in the plate data file tend to have Japanese Kanji encoded as unicode.
   # This method replaces those parameter names with a standardized text, just a patch
-  FLIPRData <- FLIPRTools:::aucParameterPatch(FLIPRData)
+  CalFluxData <- aucParameterPatch(CalFluxData)
 
   logger::log_info("Masking empty and masked wells.")
   # this method uses well annotations from the plate map to convert data from 'empty' wells
   # or wells that shouldn't be use, from numeric values to NaN (not-a-number values)
-  FLIPRData <- FLIPRTools:::maskEmptyWells(FLIPRData)
+  CalFluxData <- maskEmptyWells(CalFluxData)
   logger::log_success("Masked empty and masked wells.")
 
   logger::log_info("Filtering to selected parameters")
@@ -164,16 +164,16 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # this method removes data for parameters that should not be used (based on the parameter file)
   # only the key parameter's data will move on.
   logger::log_info("Selected parameters:")
-  ## FLIPRData <- FLIPRTools:::filterToSelectedParameters(FLIPRData)
+  ## CalFluxData <- filterToSelectedParameters(CalFluxData)
   logger::log_success("Filtered to selected parameters.")
   # Users can specify a short abbreviation to replace the full parameter names.
   # The parameter file can hold these abbreviations and set these abbreviations to be used in output instead of the longer parameter names.
-  FLIPRData <- FLIPRTools:::setParameterAbbreviations(FLIPRData)
+  CalFluxData <- setParameterAbbreviations(CalFluxData)
 
   # apply value imputations and make categorical results numeric - if specified
   # some parameters don't have numeric values, but rather text values that describe the parameter.
   # this step will optionally apply a mapping or conversion from text values to discrete numeric values.
-  FLIPRData <- FLIPRTools:::applyCategoricalToNumeric(FLIPRData)
+  CalFluxData <- applyCategoricalToNumeric(CalFluxData)
   
   print("replace blanks and NAs")
 
@@ -183,7 +183,7 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # some parameters can have values of 'N/A' or 'Blank'.
   # The lab has asked for a way to replace these values. The drop-in value or techinque for replacement is specified in the paramter input file.
   # replacement of these values is optional for each parameter.
-  FLIPRData <- FLIPRTools:::replaceBlanksAndNAValues(FLIPRData)
+  CalFluxData <- replaceBlanksAndNAValues(CalFluxData)
   logger::log_success("Finished imputing/replacing blanks and NAs")
 
 
@@ -193,7 +193,7 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # assess data completeness for each parameter. This holds information on how many plate values
   # remain empty, zero, have 'blank' values meaning no data, or have been marked as 'masked'
   # after configured blank and N/A replacements have been applied.
-  FLIPRData <- FLIPRTools:::assessDataCompleteness(FLIPRData)
+  CalFluxData <- assessDataCompleteness(CalFluxData)
   logger::log_success("Finished QC for data completeness.")
 
 
@@ -204,23 +204,23 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # the parameter file will specify how complete a parameter's data has to be in order to keep that parameter in the dataset.
   # if a given parameter has very sparse data, it may be best to exclude that parameter for downstream analysis.
   # A user threshold determines how much missing data can be tolerated.
-  FLIPRData <- FLIPRTools:::applyDataCoverageFilters(FLIPRData)
+  CalFluxData <- applyDataCoverageFilters(CalFluxData)
   logger::log_success("Finished applying data coverage filters")
 
   print("export completeness filter")
 
   # export of the data coverage tables
   # this method will create an excel file that provides information on the data coverage assessment.
-  FLIPRTools:::exportDataCoverageReport(FLIPRData)
+  exportDataCoverageReport(CalFluxData)
 
 
   print("harmonize")
 
   # harmonize parameters - make sure all plates in pairs have the same parameters (data cols)
-  # the experiments compare a FLIPRData treatment plate read (plate data set) to an untreated (time=0) control plate read.
+  # the experiments compare a CalFluxData treatment plate read (plate data set) to an untreated (time=0) control plate read.
   # This method makes sure that after possibly filtering  out parameters, plate data sets (T=0 and experimental plate read)
   # both have the same parameters reported, in commmon.
-  FLIPRData <- FLIPRTools:::harmonizeParameters(FLIPRData)
+  CalFluxData <- harmonizeParameters(CalFluxData)
 
   print("BL QA")
 
@@ -228,7 +228,7 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # This method runs Quality Control checks on the reference plate data (T=0 plate)
   # This will report on things like parameter variability, and wells that tend to be outliers, perahps having bad data (a bad well)
   if (paired_analysis) {
-    FLIPRData <- FLIPRTools:::runQcForReferencePlate(FLIPRData)
+    CalFluxData <- runQcForReferencePlate(CalFluxData)
     logger::log_success("Finished reference baseline QA")
   }
 
@@ -240,157 +240,157 @@ runDataProcessing <- function(FLIPRData, paired_analysis) {
   # This produces a new data frame/table that will report on the effect of treatment.
   # Currently we report the log2(experimental_condition_value/control_value), a log base 2 fold change.
 
-  FLIPRData <- FLIPRTools:::transformData(FLIPRData, paired_analysis)
+  CalFluxData <- transformData(CalFluxData, paired_analysis)
   print("export plate views")
 
   # create optional plate view pdf.
   # this will show plate views for each paramter, in plate-format.
   # These can reveal wells that tend to be outliers.
   if (paired_analysis) {
-    FLIPRTools:::exportPlateViews(FLIPRData)
+    exportPlateViews(CalFluxData)
   }
 
   print("export transformed data")
-  FLIPRTools:::exportTransformedData(FLIPRData)
+  exportTransformedData(CalFluxData)
   print("export bar charts")
   # create optional bar-chart
   # This exports the log2FoldChange (treatment effect) as bar charts.
-  # Barcharts show treatment effect on the y-axis, and FLIPRData concentration on the x-axis.
-  FLIPRTools:::exportBarCharts(FLIPRData)
+  # Barcharts show treatment effect on the y-axis, and CalFluxData concentration on the x-axis.
+  exportBarCharts(CalFluxData)
 
   print("ttest")
 
   if (paired_analysis) {
     # this runs a paired t-test to report on which wells show different values after treatment, for each parameter.
-    # The method stores the result in a FLIPRData object.
-    ttDf <- FLIPRTools:::runPairedTTest(FLIPRData)
+    # The method stores the result in a CalFluxData object.
+    ttDf <- runPairedTTest(CalFluxData)
 
     # exports the paired t-test results.
-    FLIPRTools:::exportPairedTTestResult(FLIPRData, ttDf, "file")
+    exportPairedTTestResult(CalFluxData, ttDf, "file")
   } else {
-    runTTest(FLIPRData)
+    runTTest(CalFluxData)
   }
 
   print("z prime")
 
   logger::log_info("Starting z-prime factor analysis of controls")
 
-  FLIPRTools:::zFactorXlsx(FLIPRData)
+  zFactorXlsx(CalFluxData)
 
   logger::log_success("Finished z-prime factor analysis of controls")
-  fullPCA <- FLIPRTools:::runPCA(FLIPRData, dataType = "transformed")
-  controlPCA <- FLIPRTools:::runPCA(FLIPRData, dataType = "controls")
+  fullPCA <- runPCA(CalFluxData, dataType = "transformed")
+  controlPCA <- runPCA(CalFluxData, dataType = "controls")
 
   # capture PCA results
-  plateReadName <- FLIPRData@plateSet@plateNames[2]
+  plateReadName <- CalFluxData@plateSet@plateNames[2]
   pcaResult <- new("pcaResult")
   pcaResult@allWellsPCA <- fullPCA
   pcaResult@controlWellsPCA <- controlPCA
-  FLIPRData@pcaResults[[plateReadName]] <- pcaResult
+  CalFluxData@pcaResults[[plateReadName]] <- pcaResult
 
-  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = fullPCA, pcaType = 1, dataName = "all_wells")
-  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = controlPCA, pcaType = 1, dataName = "control_wells")
-  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = fullPCA, pcaType = 2, dataName = "parameters_all_wells")
-  FLIPRTools:::plotPCA(FLIPRData = FLIPRData, pcaList = controlPCA, pcaType = 2, dataName = "parameters_control_wells")
+  plotPCA(CalFluxData = CalFluxData, pcaList = fullPCA, pcaType = 1, dataName = "all_wells")
+  plotPCA(CalFluxData = CalFluxData, pcaList = controlPCA, pcaType = 1, dataName = "control_wells")
+  plotPCA(CalFluxData = CalFluxData, pcaList = fullPCA, pcaType = 2, dataName = "parameters_all_wells")
+  plotPCA(CalFluxData = CalFluxData, pcaList = controlPCA, pcaType = 2, dataName = "parameters_control_wells")
 
   print("start random forest")
   # run random forest
-  FLIPRData <- FLIPRTools:::FLIPRDataMachineLearning(FLIPRData)
+  CalFluxData <- calFluxDataMachineLearning(CalFluxData)
 
   print("Analysis Done")
 
-  # returns the FLIPRData data object
-  return(FLIPRData)
+  # returns the CalFluxData data object
+  return(CalFluxData)
 }
 
 
-#' This method loads plate data according the the plate files specified within the FLIPRData parameter file.
-#' One plate object is created for each input plate file and the plate pairs are stored within the returned FLIPRData object.
-#' @param FLIPRData the input FLIPRData file generated by readFLIPRDataParameterFile
-#' @returns returns a FLIPRData object containing a plateset object with loaded plate data.
-loadPlates <- function(FLIPRData) {
-  fileList <- FLIPRData@methodParameters[["plate_file_list"]]
+#' This method loads plate data according the the plate files specified within the CalFluxData parameter file.
+#' One plate object is created for each input plate file and the plate pairs are stored within the returned CalFluxData object.
+#' @param CalFluxData the input CalFluxData file generated by readCalFluxDataParameterFile
+#' @returns returns a CalFluxData object containing a plateset object with loaded plate data.
+loadPlates <- function(CalFluxData) {
+  fileList <- CalFluxData@methodParameters[["plate_file_list"]]
   plateSet <- new("plateset")
   plates <- list()
-  dir <- FLIPRData@methodParameters[["root_dir"]]
+  dir <- CalFluxData@methodParameters[["root_dir"]]
 
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
-    plate <- read_FLIPR_data(filename = paste0(dir, file))
+    plate <- read_calflux_data(filename = paste0(dir, file))
     plateSet <- addPlate(plateSet, plate, platename)
   }
   ## add the plateset
-  FLIPRData@plateSet <- plateSet
-  return(FLIPRData)
+  CalFluxData@plateSet <- plateSet
+  return(CalFluxData)
 }
 
-#' This function loads plate annotations, plate maps as specified in the FLIPRData object after initializing with parameter file
-#' @param FLIPRData the input FLIPRData file generated by readFLIPRDataParameterFile
-#' @returns returns a FLIPRData object containing a plateset object with loaded plate data and plate map annotations.
-loadPlateMaps <- function(FLIPRData) {
-  if (is.null(FLIPRData)) {
-    print("Null FLIPRData object. Please use readFLIPRDataParameterFile() to initialize the FLIPRData file prior to loadPlateMaps()")
+#' This function loads plate annotations, plate maps as specified in the CalFluxData object after initializing with parameter file
+#' @param CalFluxData the input CalFluxData file generated by readCalFluxDataParameterFile
+#' @returns returns a CalFluxData object containing a plateset object with loaded plate data and plate map annotations.
+loadPlateMaps <- function(CalFluxData) {
+  if (is.null(CalFluxData)) {
+    print("Null CalFluxData object. Please use readCalFluxDataParameterFile() to initialize the CalFluxData file prior to loadPlateMaps()")
     return()
   }
 
-  fileList <- FLIPRData@methodParameters[["plate_map_list"]]
-  dir <- FLIPRData@methodParameters[["root_dir"]]
+  fileList <- CalFluxData@methodParameters[["plate_map_list"]]
+  dir <- CalFluxData@methodParameters[["root_dir"]]
 
   if (is.null(fileList) || is.null(dir)) {
     print("Null root directory or plate file list in paramters.
     Please check the parameters file for the root directory and plate list information.
-    Then reload the updated parameter file using readFLIPRDataParameterFile(FLIPRData) function.")
-    return(FLIPRData)
+    Then reload the updated parameter file using readCalFluxDataParameterFile(CalFluxData) function.")
+    return(CalFluxData)
   }
 
   for (platename in names(fileList)) {
     file <- fileList[[platename]]
-    plate <- FLIPRData@plateSet@plates[[platename]]
-    plate <- FLIPRTools:::read_FLIPR_metadata(paste0(dir, file), plate)
-    FLIPRData@plateSet@plates[[platename]] <- plate
+    plate <- CalFluxData@plateSet@plates[[platename]]
+    plate <- read_calflux_metadata(paste0(dir, file), plate)
+    CalFluxData@plateSet@plates[[platename]] <- plate
   }
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
 #' Method updates parameter abbreviations to those specified in the parameter file
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object with parameter abbreviations set to use for all downstream reports.
-setParameterAbbreviations <- function(FLIPRData) {
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object with parameter abbreviations set to use for all downstream reports.
+setParameterAbbreviations <- function(CalFluxData) {
   keyCols <- c("Statistic", "Suggested_Abbreviation")
 
-  if (!all(keyCols %in% colnames(FLIPRData@parameterInfo))) {
+  if (!all(keyCols %in% colnames(CalFluxData@parameterInfo))) {
     print("Parameter information doesn't have key column names 'Statistic' and 'Suggested_Abbreviation'.
           Please update the parameter file to include these columns.
           Note that column names need to match these names exactly, including case.")
   }
 
-  abbrInfo <- FLIPRData@parameterInfo[, keyCols]
+  abbrInfo <- CalFluxData@parameterInfo[, keyCols]
 
-  for (platename in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[platename]]
+  for (platename in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[platename]]
     plate <- applyParameterAbbreviations(plate, abbrInfo)
-    FLIPRData@plateSet@plates[[platename]] <- plate
+    CalFluxData@plateSet@plates[[platename]] <- plate
 
   }
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
 ####################
 #####
-##### high level methods working on the FLIPRData object
+##### high level methods working on the CalFluxData object
 #####
 ####################
 
 #' Converts well vales to NaN for wells that are annotated in the platemap as "Empty".
 #' Downstream methods will not be impacted by these well values.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object with specified wells masked.
-maskEmptyWells <- function(FLIPRData) {
-  for (plateName in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[plateName]]
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object with specified wells masked.
+maskEmptyWells <- function(CalFluxData) {
+  for (plateName in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[plateName]]
     plateMap <- plate@plateAnnotMap
     df <- plate@plateData
 
@@ -401,38 +401,38 @@ maskEmptyWells <- function(FLIPRData) {
     df[plateMap$Mask == 1, ] <- "Masked"
 
     plate@plateData <- df
-    FLIPRData@plateSet@plates[[plateName]] <- plate
+    CalFluxData@plateSet@plates[[plateName]] <- plate
   }
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 #' Reduces the plate data object to only contain data for the subset of selected parameters.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object with working set of plate data reduced to parameters specified in the parameter file.
-filterToSelectedParameters <- function(FLIPRData) {
-  pInfo <- FLIPRData@parameterInfo
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object with working set of plate data reduced to parameters specified in the parameter file.
+filterToSelectedParameters <- function(CalFluxData) {
+  pInfo <- CalFluxData@parameterInfo
   paramsToKeep <- unlist(pInfo$Statistic[pInfo$Use == 1])
 
-  for (platename in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[platename]]
+  for (platename in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[platename]]
     plate <- filterParametersOnList(plate, paramsToKeep)
-    FLIPRData@plateSet@plates[[platename]] <- plate
+    CalFluxData@plateSet@plates[[platename]] <- plate
   }
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
 #' Converts categorical data to numeric values according to specified rules in the input parameter file.
 #' Note that this method will only run on parameters that are flagged as having categorical data.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
-applyCategoricalToNumeric <- function(FLIPRData) {
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object categorical parameters converted to numeric values as specified in the parameter file.
+applyCategoricalToNumeric <- function(CalFluxData) {
   # get parameters to convert
-  paramsToMap <- FLIPRData@parameterInfo[!is.na(FLIPRData@parameterInfo$cat_to_num_map), ]
+  paramsToMap <- CalFluxData@parameterInfo[!is.na(CalFluxData@parameterInfo$cat_to_num_map), ]
 
-  for (platename in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[platename]]
+  for (platename in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[platename]]
 
     for (i in 1:nrow(paramsToMap)) {
       abbrParam <- paramsToMap[i, 2]
@@ -451,17 +451,17 @@ applyCategoricalToNumeric <- function(FLIPRData) {
       vals <- as.numeric(vals)
 
       plate <- encodeDiscreteParameters(plate, abbrParam, keys, vals)
-      FLIPRData@plateSet@plates[[platename]] <- plate
+      CalFluxData@plateSet@plates[[platename]] <- plate
     }
   }
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 #' Replaces 'Blank' or Empty data and N/A data for each parameter according to specified rules for each parameter.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
-replaceBlanksAndNAValues <- function(FLIPRData) {
-  paramInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, ]
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object categorical parameters converted to numeric values as specified in the parameter file.
+replaceBlanksAndNAValues <- function(CalFluxData) {
+  paramInfo <- CalFluxData@parameterInfo[CalFluxData@parameterInfo$Use == 1, ]
   naParams <- paramInfo[paramInfo$NA_Replace != "N", ]
   naParamList <- naParams$NA_Replace
   names(naParamList) <- naParams$Suggested_Abbreviation
@@ -470,21 +470,21 @@ replaceBlanksAndNAValues <- function(FLIPRData) {
   blankParamList <- blankParams$Blank_Replace
   names(blankParamList) <- blankParams$Suggested_Abbreviation
 
-  refinedPlateSet <- replaceBlanksAndNAs(FLIPRData@plateSet, blankParamList, naParamList)
-  FLIPRData@plateSet <- refinedPlateSet
+  refinedPlateSet <- replaceBlanksAndNAs(CalFluxData@plateSet, blankParamList, naParamList)
+  CalFluxData@plateSet <- refinedPlateSet
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
-#' Runs an analysis on the FLIPRData object to report on data coverage for each parameter.
-#' The missing data report is entered into the FLIPRData object.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object containing the missing data report in the dataCoverageTables slot
-assessDataCompleteness <- function(FLIPRData) {
+#' Runs an analysis on the CalFluxData object to report on data coverage for each parameter.
+#' The missing data report is entered into the CalFluxData object.
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object containing the missing data report in the dataCoverageTables slot
+assessDataCompleteness <- function(CalFluxData) {
   dataCoverage <- list()
 
-  plates <- FLIPRData@plateSet@plates
-  pInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, c(1, 2)]
+  plates <- CalFluxData@plateSet@plates
+  pInfo <- CalFluxData@parameterInfo[CalFluxData@parameterInfo$Use == 1, c(1, 2)]
 
   for (platename in names(plates)) {
     plate <- plates[[platename]]
@@ -505,27 +505,27 @@ assessDataCompleteness <- function(FLIPRData) {
     dataCoverage[[platename]] <- missingValReport
   }
 
-  FLIPRData@plateSet@dataCoverageTables <- dataCoverage
+  CalFluxData@plateSet@dataCoverageTables <- dataCoverage
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
 #' This method optionally removes parameters that have a large amount of missing data, beyond specified levels.
-#' @param FLIPRData FLIPRData object initialized with parameter file, plate data and plate maps loaded.
-#' @returns returns the FLIPRData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
-applyDataCoverageFilters <- function(FLIPRData) {
+#' @param CalFluxData CalFluxData object initialized with parameter file, plate data and plate maps loaded.
+#' @returns returns the CalFluxData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
+applyDataCoverageFilters <- function(CalFluxData) {
   # for each plate loop over paramters to check their coverage and apply limits
   # get lower coverage limit for each parameter
-  pInfo <- FLIPRData@parameterInfo[FLIPRData@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT", "Max_CV")]
+  pInfo <- CalFluxData@parameterInfo[CalFluxData@parameterInfo$Use == 1, c("Statistic", "Suggested_Abbreviation", "Min_Data_Coverage_PCT", "Max_CV")]
 
   # pSize (plate size) has to be reduced to the number of non-empty wells.
-  pSize <- FLIPRData@plateSet@dataCoverageTables[[1]]$Keeper_Wells[1]
+  pSize <- CalFluxData@plateSet@dataCoverageTables[[1]]$Keeper_Wells[1]
   pInfo$max_data_loss <- pSize - ceiling((pInfo$Min_Data_Coverage_PCT / 100.0) * pSize)
 
   pInfo <- pInfo[,c("Suggested_Abbreviation","Max_CV","max_data_loss")]
 
-  plateSet <- FLIPRData@plateSet
+  plateSet <- CalFluxData@plateSet
   dataCoverage <- plateSet@dataCoverageTables
 
   for (n in names(dataCoverage)) {
@@ -541,10 +541,10 @@ applyDataCoverageFilters <- function(FLIPRData) {
     dataCoverage[[n]] <- dcov
   }
 
-  FLIPRData@plateSet@dataCoverageTables <- dataCoverage
+  CalFluxData@plateSet@dataCoverageTables <- dataCoverage
 
-  plates <- FLIPRData@plateSet@plates
-  dataCoverage <- FLIPRData@plateSet@dataCoverageTables
+  plates <- CalFluxData@plateSet@plates
+  dataCoverage <- CalFluxData@plateSet@dataCoverageTables
   for (platename in names(plates)) {
     plate <- plates[[platename]]
     dcov <- dataCoverage[[platename]]
@@ -555,52 +555,52 @@ applyDataCoverageFilters <- function(FLIPRData) {
     plates[[platename]] <- plate
   }
 
-  FLIPRData@plateSet@plates <- plates
+  CalFluxData@plateSet@plates <- plates
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
 #' Exports the data coverage report that lists parameters and information on missing data.
-#' @param FLIPRData the FLIPRData object containing pre-computed data coverage results
-exportDataCoverageReport <- function(FLIPRData) {
-  rootDir <- FLIPRData@methodParameters[["root_dir"]]
+#' @param CalFluxData the CalFluxData object containing pre-computed data coverage results
+exportDataCoverageReport <- function(CalFluxData) {
+  rootDir <- CalFluxData@methodParameters[["root_dir"]]
   fileName <- constructFileName(
     baseFileName = "Plate_Read_Data_Coverage",
-    plateReadLabel = FLIPRData@plateSet@plateNames[1],
+    plateReadLabel = CalFluxData@plateSet@plateNames[1],
     fileExtension = "xlsx"
   )
 
-  tabs <- FLIPRData@plateSet@dataCoverageTables
+  tabs <- CalFluxData@plateSet@dataCoverageTables
   # openxlsx::write.xlsx(tabs, file = paste0(rootDir,fileName,".xlsx"))
   openxlsx::write.xlsx(tabs, file = fileName)
 }
 
 #' Makes sure that the reference plate read and the treatment plate read have the same parameters
 #' after possibly filtering based on data loss.
-#' @param FLIPRData the FLIPRData object having plate read pairs for comparison
-harmonizeParameters <- function(FLIPRData) {
-  FLIPRData@plateSet <- harmonizeParametersAcrossPlates(FLIPRData@plateSet)
-  return(FLIPRData)
+#' @param CalFluxData the CalFluxData object having plate read pairs for comparison
+harmonizeParameters <- function(CalFluxData) {
+  CalFluxData@plateSet <- harmonizeParametersAcrossPlates(CalFluxData@plateSet)
+  return(CalFluxData)
 }
 
 #' Runs quality control on the reference (control) plate read, prior to treatment.
 #' This collects information on parameter variation (standard deviation, and coefficient of variation)
 #' and z-scores for each parameter and each well help to identy outlier/bad wells that we might want to 'mask'
-#' @param FLIPRData the FLIPRData object having a platepair object with a loaded reference plate
-runQcForReferencePlate <- function(FLIPRData) {
-  runReferenceQC(FLIPRData@plateSet, FLIPRData@methodParameters$root_dir, FLIPRData@methodParameters$plate_file_list[[1]])
-  return(FLIPRData)
+#' @param CalFluxData the CalFluxData object having a platepair object with a loaded reference plate
+runQcForReferencePlate <- function(CalFluxData) {
+  runReferenceQC(CalFluxData@plateSet, CalFluxData@methodParameters$root_dir, CalFluxData@methodParameters$plate_file_list[[1]])
+  return(CalFluxData)
 }
 
 #' Transforms the plate data using the configured transformation method
 #' This produces a single table that reports on the comparison between the reference or control state
-#' versus the FLIPRData treated state.
-#' @param FLIPRData a FLIPRData object having plate data (a platepair object) to transform
+#' versus the CalFluxData treated state.
+#' @param CalFluxData a CalFluxData object having plate data (a platepair object) to transform
 #' @param paired_analysis boolean specifying if plate pairs are used for baseline correction
-#' @return a FLIPRData object with platepair object now containing the transformed data
-transformData <- function(FLIPRData, paired_analysis) {
-  transformationMethod <- FLIPRData@methodParameters$analysis_params$Transformation
+#' @return a CalFluxData object with platepair object now containing the transformed data
+transformData <- function(CalFluxData, paired_analysis) {
+  transformationMethod <- CalFluxData@methodParameters$analysis_params$Transformation
   if (is.null(transformationMethod) || is.na(transformationMethod) || trimws(transformationMethod) == "") {
     transformationMethod <- "log2ratio"
   }
@@ -608,35 +608,35 @@ transformData <- function(FLIPRData, paired_analysis) {
 
   i <- 1
   plateNames <- c()
-  for (plateName in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[plateName]]
+  for (plateName in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
     if (paired_analysis) {
       if (i %% 2 == 0) {
-        FLIPRData@plateSet <- dataTransform(FLIPRData@plateSet, platePair = plateNames, method = transformationMethod, firstDataCol = 1)
+        CalFluxData@plateSet <- dataTransform(CalFluxData@plateSet, platePair = plateNames, method = transformationMethod, firstDataCol = 1)
         plateNames <- c()
       }
     } else {
       tfLabel <- paste0("untransformed", i)
       tfd <- plate@plateData
-      FLIPRData@plateSet@transformedPlateData[[tfLabel]] <- tfd
+      CalFluxData@plateSet@transformedPlateData[[tfLabel]] <- tfd
     }
     i <- i + 1
   }
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 #' Exports views of the plate data, for each parameter, as a pdf file.
 #' The exported file will include the date and time of file creation.
-#' @param FLIPRData a FLIPRData object containing plate data and having transformed data
-exportPlateViews <- function(FLIPRData) {
-  plateSet <- FLIPRData@plateSet
+#' @param CalFluxData a CalFluxData object containing plate data and having transformed data
+exportPlateViews <- function(CalFluxData) {
+  plateSet <- CalFluxData@plateSet
   i <- 1
   plateNames <- c()
   ptoPlot <- c()
 
-  for (plateName in names(FLIPRData@plateSet@plates)) {
-    plate <- FLIPRData@plateSet@plates[[plateName]]
+  for (plateName in names(CalFluxData@plateSet@plates)) {
+    plate <- CalFluxData@plateSet@plates[[plateName]]
     plateNames <- c(plateNames, plateName)
 
     # reports on each pair of plate reads
@@ -662,10 +662,10 @@ exportPlateViews <- function(FLIPRData) {
     }
     i <- i + 1
   }
-  rootDir <- FLIPRData@methodParameters[["root_dir"]]
+  rootDir <- CalFluxData@methodParameters[["root_dir"]]
   fileName <- constructFileName(
     baseFileName = "Plate_Coverage_Heatmaps",
-    plateReadLabel = FLIPRData@plateSet@plateNames[1],
+    plateReadLabel = CalFluxData@plateSet@plateNames[1],
     fileExtension = "pdf"
   )
 
@@ -678,38 +678,38 @@ exportPlateViews <- function(FLIPRData) {
   dev.off()
 }
 
-#' This function exports a series of barcharts for each FLIPRData and each parameter into a pdf file.
-#' @param FLIPRData a FLIPRData object having transformed data.
-exportBarCharts <- function(FLIPRData) {
-  samples <- unique(FLIPRData@plateSet@plates[[1]]@plateAnnotMap$Compound)
+#' This function exports a series of barcharts for each CalFluxData and each parameter into a pdf file.
+#' @param CalFluxData a CalFluxData object having transformed data.
+exportBarCharts <- function(CalFluxData) {
+  samples <- unique(CalFluxData@plateSet@plates[[1]]@plateAnnotMap$Compound)
   samples <- samples[samples != ""]
 
   ### need to refer to input for control compound name/tag
   samples <- samples[!(samples %in% c("Veh1", "Veh2"))]
 
   # need to adjust to work over multiple plate pairs in plate set...
-  plateset <- FLIPRData@plateSet
-  params <- colnames(FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]])
-  plotgrid <- FLIPRTools:::getBarChartTrellis(plateSet = plateset, samples = samples, parameters = params, samplesIn = "rows", tMethod = "log2Ratio")
+  plateset <- CalFluxData@plateSet
+  params <- colnames(CalFluxData@plateSet@transformedPlateData[[length(CalFluxData@plateSet@transformedPlateData)]])
+  plotgrid <- getBarChartTrellis(plateSet = plateset, samples = samples, parameters = params, samplesIn = "rows", tMethod = "log2Ratio")
 
   gridDim <- dim(plotgrid)
-  rootDir <- FLIPRData@methodParameters[["root_dir"]]
+  rootDir <- CalFluxData@methodParameters[["root_dir"]]
 
-  fileName <- constructFileName(baseFileName = "Response_Bar_Charts", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
+  fileName <- constructFileName(baseFileName = "Response_Bar_Charts", plateReadLabel = CalFluxData@plateSet@plateNames[1], fileExtension = "pdf")
   pdf(fileName, height = gridDim[1] * 2, width = gridDim[2] * 2)
   gridExtra::grid.arrange(plotgrid)
   dev.off()
 }
 
-#' Performes a paired t-test to compare FLIPRData treated samples from the reference/control state.
-#' @param FLIPRData FLIPRData object having loaded plate data.
+#' Performes a paired t-test to compare CalFluxData treated samples from the reference/control state.
+#' @param CalFluxData CalFluxData object having loaded plate data.
 #' @return a dataframe containing stat results for each parameter, for each well.
-runPairedTTest <- function(FLIPRData) {
-  plateset <- FLIPRData@plateSet
+runPairedTTest <- function(CalFluxData) {
+  plateset <- CalFluxData@plateSet
   plateNames <- names(plateset@plates)
-  # return if the FLIPRData does not have an even number of plates (plate reads)
+  # return if the CalFluxData does not have an even number of plates (plate reads)
   if (length(plateNames) %% 2 != 0) {
-    return(FLIPRData)
+    return(CalFluxData)
   }
   results <- list()
   lfcVals <- list()
@@ -741,8 +741,8 @@ runPairedTTest <- function(FLIPRData) {
         concs <- concs[concs != 0]
         for (conc in concs) {
           wells <- currCov[currCov$Concentration == conc, ]$Well
-          refData <- FLIPRTools:::getPlateDataByWellSet(plate = refPlate, wells)
-          exptData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, wells)
+          refData <- getPlateDataByWellSet(plate = refPlate, wells)
+          exptData <- getPlateDataByWellSet(plate = exptPlate, wells)
 
           if (!is.data.frame(refData) || !is.data.frame(exptData) ||
               ncol(refData) == 0 || ncol(exptData) == 0) {
@@ -761,7 +761,7 @@ runPairedTTest <- function(FLIPRData) {
             data$d2 <- d2
 
             # need to convert to numeric
-            data <- data.frame(lapply(data, FUN = FLIPRTools:::coercePlateValuesToNumeric))
+            data <- data.frame(lapply(data, FUN = coercePlateValuesToNumeric))
             data <- na.omit(data)
             meanExpt <- mean(data[, 2], na.rm = T) + 0.001
             meanRef <- mean(data[, 1], na.rm = T) + 0.001
@@ -821,17 +821,17 @@ runPairedTTest <- function(FLIPRData) {
 }
 
 #' Generic T test function for multiple experimental designs
-#' @param FLIPRData FLIPRData object having loaded plate data.
+#' @param CalFluxData CalFluxData object having loaded plate data.
 #' @return a dataframe containing stat results for each parameter, for each well.
-runTTest <- function(FLIPRData) {
-  plateset <- FLIPRData@plateSet
+runTTest <- function(CalFluxData) {
+  plateset <- CalFluxData@plateSet
   plateNames <- names(plateset@plates)
   results <- list()
   lfcVals <- list()
   i <- 1
-  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
-  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
-  sampleKey <- FLIPRData@methodParameters$analysis_params$Test_Sample_Key
+  posControlKey <- CalFluxData@methodParameters$analysis_params$Positive_Control_Key
+  negControlKey <- CalFluxData@methodParameters$analysis_params$Negative_Control_Key
+  sampleKey <- CalFluxData@methodParameters$analysis_params$Test_Sample_Key
   
   for (name in plateNames) {
     ## get unique compounds, plate data and metadata from the reference plate
@@ -865,8 +865,8 @@ runTTest <- function(FLIPRData) {
       concs <- concs[concs != 0]
       for (conc in concs) {
         wells <- currCov[currCov$Concentration == conc, ]$Well
-        refData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, controlWells)
-        exptData <- FLIPRTools:::getPlateDataByWellSet(plate = exptPlate, wells)
+        refData <- getPlateDataByWellSet(plate = exptPlate, controlWells)
+        exptData <- getPlateDataByWellSet(plate = exptPlate, wells)
 
         ## if (ncol(refData) != ncol(exptData)) {
         ##   next
@@ -881,7 +881,7 @@ runTTest <- function(FLIPRData) {
           data <- list(d1,d2)
 
           # need to convert to numeric
-          data <- lapply(data, FUN = FLIPRTools:::coercePlateValuesToNumeric)
+          data <- lapply(data, FUN = coercePlateValuesToNumeric)
           data <- lapply(data,na.omit)
           meanExpt <- mean(data[[2]], na.rm = T) + 0.001
           meanRef <- mean(data[[1]], na.rm = T) + 0.001
@@ -941,27 +941,27 @@ runTTest <- function(FLIPRData) {
 }
 
 #' Utility analysis method to generate z-prime factor data.
-#' @param FLIPRData FLIPRData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
+#' @param CalFluxData CalFluxData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
 #' @param dataType Either transformed or raw data.
 #' @returns a z-prime factor result table with positive and negative control means, SDs, CVs and the z-prime factors for each parameter.
 #' @export
-zFactor <- function(FLIPRData, dataType = "transformed") {
+zFactor <- function(CalFluxData, dataType = "transformed") {
   # The @ is used to dereference
-  # Here we have the FLIPRData object, dereference the plateset object, and finally get the transformedPlateData
+  # Here we have the CalFluxData object, dereference the plateset object, and finally get the transformedPlateData
   # it's designed as a list or dictionary
-  plateTransformedData <- FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]]
+  plateTransformedData <- CalFluxData@plateSet@transformedPlateData[[length(CalFluxData@plateSet@transformedPlateData)]]
 
   # an R list object is dereferenced using double brackets
   # you can refer to a member of the list by name or by index. *R indexing starts at 1
   if (dataType == "transformed") {
     testData <- plateTransformedData
   } else {
-    testData <- FLIPRData@plateSet@plates[[1]]@plateData
+    testData <- CalFluxData@plateSet@plates[[1]]@plateData
   }
   # the platemap holds well annotations, it's a dataframe
-  # this gets the plateset from the FLIPRData object, plate list, takes the first plate, and then
+  # this gets the plateset from the CalFluxData object, plate list, takes the first plate, and then
   # the plateAnnotationMap field.
-  plateMap <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
+  plateMap <- CalFluxData@plateSet@plates[[1]]@plateAnnotMap
 
   # an alternative to viewing a table is using the 'Global Envionment' in the upper right window.
   # if the variable is a data.frame, click on the table icon on the far right to view the data.
@@ -973,8 +973,8 @@ zFactor <- function(FLIPRData, dataType = "transformed") {
   splicedData <- tableWithAnnotation[tableWithAnnotation$Compound != "Empty", ]
   splicedData <- splicedData[splicedData$Mask != 1, ]
 
-  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
-  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
+  posControlKey <- CalFluxData@methodParameters$analysis_params$Positive_Control_Key
+  negControlKey <- CalFluxData@methodParameters$analysis_params$Negative_Control_Key
 
   # Create a data frame that only contains positive controls
   PosCtrl <- splicedData[splicedData$WellType == posControlKey, ]
@@ -985,11 +985,11 @@ zFactor <- function(FLIPRData, dataType = "transformed") {
   # unique(NegCtrl$WellType)
 
   # make means and sds data frame for both controls
-  numericPosCtrl <- data.frame(sapply(PosCtrl[, (ncol(plateMap) + 1):ncol(PosCtrl)], FLIPRTools:::coercePlateValuesToNumeric))
+  numericPosCtrl <- data.frame(sapply(PosCtrl[, (ncol(plateMap) + 1):ncol(PosCtrl)], coercePlateValuesToNumeric))
   allUPosCtrl <- colMeans(numericPosCtrl)
   allSDPosCtrl <- sapply(numericPosCtrl, sd)
 
-  numericNegCtrl <- data.frame(sapply(NegCtrl[, (ncol(plateMap) + 1):ncol(NegCtrl)], FLIPRTools:::coercePlateValuesToNumeric))
+  numericNegCtrl <- data.frame(sapply(NegCtrl[, (ncol(plateMap) + 1):ncol(NegCtrl)], coercePlateValuesToNumeric))
   allUNegCtrl <- colMeans(numericNegCtrl)
   allSDNegCtrl <- sapply(numericNegCtrl, sd)
 
@@ -1011,21 +1011,21 @@ zFactor <- function(FLIPRData, dataType = "transformed") {
 
 #' Runs a z-prime factor analysis on transformed and raw data results. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)
 #' Exports a file containing z-prime factor, mean, SD and CV of each parameter using both transformed and raw data.
-#' @param FLIPRData a FLIPRData object containing transformed data on which to report z-prime on.
+#' @param CalFluxData a CalFluxData object containing transformed data on which to report z-prime on.
 #' @export
-zFactorXlsx <- function(FLIPRData) {
-  fileName <- constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "xlsx")
+zFactorXlsx <- function(CalFluxData) {
+  fileName <- constructFileName(baseFileName = "zPrime_Control_Results", plateReadLabel = CalFluxData@plateSet@plateNames[1], fileExtension = "xlsx")
 
   # Make a list
   zPrimeList <- list()
 
   # First call to zFactor calculation to calculate for transformed data
-  zPrimeList[["transformedDataResults"]] <- FLIPRTools:::zFactor(FLIPRData)
+  zPrimeList[["transformedDataResults"]] <- zFactor(CalFluxData)
 
   # Second call to zFactor to calculate for raw data
-  zPrimeList[["rawDataResults"]] <- FLIPRTools:::zFactor(FLIPRData, "experimental")
+  zPrimeList[["rawDataResults"]] <- zFactor(CalFluxData, "experimental")
 
-  fileName <- FLIPRTools:::constructFileName(baseFileName = "zPrimeFactorResults", plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "xlsx")
+  fileName <- constructFileName(baseFileName = "zPrimeFactorResults", plateReadLabel = CalFluxData@plateSet@plateNames[1], fileExtension = "xlsx")
 
   # Write to an Excel file
   openxlsx::write.xlsx(zPrimeList,
@@ -1035,18 +1035,18 @@ zFactorXlsx <- function(FLIPRData) {
 }
 
 
-#' Runs a PCA on FLIPRData data
-#' @param FLIPRData FLIPRData object containing data
+#' Runs a PCA on CalFluxData data
+#' @param CalFluxData CalFluxData object containing data
 #' @param dataType c("transformed', 'raw', 'controls') to indicate if the data should be all transformed well data, all raw well data,
 #' or well data only from control wells.
-#' @param compoundList an optional vector of compounds ids to use for PCA
+#' @param compoundIDList an optional vector of compound ids to use for PCA
 #' @param scale should the PCA be scaled. Default is TRUE.
 #' @returns a list object containing 4 fields. 'Wells PCA' and 'Parameters PCA' contain the prcomp objects for running PCA on wells or parameters.
 #' The Annotations element is a data frame containing well annotations. The 'Parameter Names' element is a data frame containing parameter info.
 #' @export
-runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, scale = T) {
-  plateTransformedData <- FLIPRData@plateSet@transformedPlateData
-  plateMap <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
+runPCA <- function(CalFluxData, dataType = "transformed", compoundIDList = NULL, scale = T) {
+  plateTransformedData <- CalFluxData@plateSet@transformedPlateData
+  plateMap <- CalFluxData@plateSet@plates[[1]]@plateAnnotMap
   pcaList <- list()
 
   failPCA <- function(reason, reducedPlateMap = NULL, parameterNames = NULL) {
@@ -1063,10 +1063,10 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
   if (dataType == "transformed") {
     testData <- plateTransformedData[[length(plateTransformedData)]]
   } else if (dataType == "raw") {
-    testData <- FLIPRData@plateSet@plates[[2]]@plateData
+    testData <- CalFluxData@plateSet@plates[[2]]@plateData
   } else if (dataType == "controls") {
-    posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
-    negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
+    posControlKey <- CalFluxData@methodParameters$analysis_params$Positive_Control_Key
+    negControlKey <- CalFluxData@methodParameters$analysis_params$Negative_Control_Key
     controlKeys <- c(posControlKey, negControlKey)
 
     testData <- plateTransformedData[[length(plateTransformedData)]]
@@ -1095,7 +1095,7 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
   # Match the random forest preprocessing: prefer dropping incomplete feature
   # columns over dropping wells with any missing exported parameter.
   testDataSplice <- splicedData[, (ncol(plateMap) + 1):ncol(splicedData), drop = FALSE]
-  testDataSplice <- data.frame(lapply(testDataSplice, FLIPRTools:::coercePlateValuesToNumeric))
+  testDataSplice <- data.frame(lapply(testDataSplice, coercePlateValuesToNumeric))
   
   if (ncol(testDataSplice) == 0 || nrow(testDataSplice) == 0) {
     return(failPCA("No numeric parameter data remain after preprocessing.", reducedPlateMap, parameterNames))
@@ -1148,11 +1148,11 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
     return(failPCA("All wells have zero variance across retained parameters after transposition.", reducedPlateMap, parameterNames))
   }
 
-  pcaFLIPRData <- prcomp(as.matrix(testDataSpliceVarComplete), center = TRUE, scale. = scale, retx = TRUE)
-  pcaFLIPRDataT <- prcomp(testDataSpliceTvar, center = TRUE, scale. = scale, retx = TRUE)
+  pcaCalFluxData <- prcomp(as.matrix(testDataSpliceVarComplete), center = TRUE, scale. = scale, retx = TRUE)
+  pcaCalFluxDataT <- prcomp(testDataSpliceTvar, center = TRUE, scale. = scale, retx = TRUE)
 
-  pcaList[["Wells PCA"]] <- pcaFLIPRData
-  pcaList[["Parameters PCA"]] <- pcaFLIPRDataT
+  pcaList[["Wells PCA"]] <- pcaCalFluxData
+  pcaList[["Parameters PCA"]] <- pcaCalFluxDataT
 
   # add something in the list to add the annotation
   pcaList[["Annotations"]] <- reducedPlateMap
@@ -1164,16 +1164,17 @@ runPCA <- function(FLIPRData, dataType = "transformed", compoundIDList = NULL, s
 }
 
 
+#' Plot PCA results
 #'
 #' @import ggfortify
 #' @import ggplot2
-#' @param FLIPRData The FLIPRData object containing pcaResults
+#' @param CalFluxData The CalFluxData object containing pcaResults
 #' @param pcaList A list object containing PCA results
 #' @param pcaType 1 = wells pca, 2 = parameters pca
 #' @param plotLoadings a boolean value determining if PCA loadings should be plotted.
 #' @param dataName an optional string to tag on the data results.
 #' @export
-plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName = "") {
+plotPCA <- function(CalFluxData, pcaList, pcaType = 1, plotLoadings = F, dataName = "") {
   plotTitle <- ""
 
   if (is.null(pcaList) || isFALSE(pcaList[["PCA Available"]])) {
@@ -1328,7 +1329,7 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
     )
 
   fileName <- paste0(plotTitle, "_", dataName)
-  fileName <- FLIPRTools:::constructFileName(baseFileName = fileName, plateReadLabel = FLIPRData@plateSet@plateNames[1], fileExtension = "pdf")
+  fileName <- constructFileName(baseFileName = fileName, plateReadLabel = CalFluxData@plateSet@plateNames[1], fileExtension = "pdf")
 
   pdf(file = fileName, width = 11, height = 8)
   print(pcaPlot)
@@ -1338,25 +1339,25 @@ plotPCA <- function(FLIPRData, pcaList, pcaType = 1, plotLoadings = F, dataName 
 }
 
 
-#' generatees random forest predictions for FLIPRDatas
-#' @param FLIPRData a FLIPRData object containing transformed data that's ready for analysis
+#' generatees random forest predictions for CalFluxData objects
+#' @param CalFluxData a CalFluxData object containing transformed data that's ready for analysis
 #' @param masking list of wells to optionally mask
 #' @returns creates a prediction heatmap and dot plot, returns a Heatmap object.
 #' @import dplyr
 #' @export
-FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
+calFluxDataMachineLearning <- function(CalFluxData, masking = NULL) {
   ml <- new("MachineLearning")
 
-  plateNames <- FLIPRData@plateSet@plateNames
+  plateNames <- CalFluxData@plateSet@plateNames
   plateName <- plateNames[length(plateNames)]
 
-  negControlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
-  posControlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
-  sampleKey <- FLIPRData@methodParameters$analysis_params$Test_Sample_Key
+  negControlKey <- CalFluxData@methodParameters$analysis_params$Negative_Control_Key
+  posControlKey <- CalFluxData@methodParameters$analysis_params$Positive_Control_Key
+  sampleKey <- CalFluxData@methodParameters$analysis_params$Test_Sample_Key
   
   # Subsetting data
-  data_imputed <- FLIPRData@plateSet@transformedPlateData[[length(FLIPRData@plateSet@transformedPlateData)]]
-  sample_info <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
+  data_imputed <- CalFluxData@plateSet@transformedPlateData[[length(CalFluxData@plateSet@transformedPlateData)]]
+  sample_info <- CalFluxData@plateSet@plates[[1]]@plateAnnotMap
 
   data_imputed <- data_imputed[which(sample_info$Compound != "Empty" & sample_info$Mask != 1), , drop = FALSE]
 
@@ -1410,7 +1411,7 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
 
   cont_training_data <-
     cont_training_data %>%
-    dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+    dplyr::mutate_if(is.character, coercePlateValuesToNumeric)
 
   featureCols <- setdiff(colnames(cont_training_data), "label")
   trainingFeatures <- cont_training_data[, featureCols, drop = FALSE]
@@ -1458,7 +1459,7 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
   # Use a stable seed so repeated runs on the same input produce the same model
   # and downstream heatmaps. Allow an override from the analysis parameter file.
   randomSeed <- 12345L
-  seedParam <- FLIPRData@methodParameters$analysis_params$Random_Seed
+  seedParam <- CalFluxData@methodParameters$analysis_params$Random_Seed
   if (!is.null(seedParam)) {
     parsedSeed <- suppressWarnings(as.integer(seedParam))
     if (!is.na(parsedSeed)) {
@@ -1507,7 +1508,7 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
 
     new_testing_data <-
       new_testing_data %>%
-      dplyr::mutate_if(is.character, FLIPRTools:::coercePlateValuesToNumeric)
+      dplyr::mutate_if(is.character, coercePlateValuesToNumeric)
     trainingFeatureNames <- setdiff(colnames(cont_training_data), "label")
     new_testing_data <- new_testing_data[, trainingFeatureNames, drop = FALSE]
     missingTestingCellCount <- sum(is.na(new_testing_data))
@@ -1537,7 +1538,8 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     }
 
     new_predictions <- data.frame(
-      FLIPRData = sample_info$Compound[testing_rows], Concentration = sample_info$Concentration[testing_rows],
+      Compound = sample_info$Compound[testing_rows],
+      Concentration = sample_info$Concentration[testing_rows],
       Index = rownames(testing_data)
     )
     new_test_labels <- data.frame(new_test_labels, Index = rownames(new_testing_data)[completeTestingRows])
@@ -1550,18 +1552,18 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     ml@predictions <- new_predictions
 
     # Generating new data frames with numerical data
-    compound_list <- unique(new_predictions$FLIPRData)
+    compound_list <- unique(new_predictions$Compound)
 
     prediction_mean <- data.frame(check.names = FALSE)
     prediction_sd <- data.frame(check.names = FALSE)
 
     for (i in compound_list) {
       # create concentration list for each compound
-      conc_list <- sort(unique(as.numeric(new_predictions[new_predictions$FLIPRData == i, "Concentration"])))
+      conc_list <- sort(unique(as.numeric(new_predictions[new_predictions$Compound == i, "Concentration"])))
 
       for (j in conc_list) {
         # create class list for each concentration of each compound
-        class_df <- new_predictions[new_predictions$FLIPRData == i & new_predictions$Concentration == j, "class"] %>%
+        class_df <- new_predictions[new_predictions$Compound == i & new_predictions$Concentration == j, "class"] %>%
           as.numeric() %>%
           as.data.frame()
 
@@ -1574,23 +1576,23 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
       }
     }
 
-    prediction_mean <- FLIPRTools:::normalizePredictionConcentrationColumns(prediction_mean)
-    prediction_sd <- FLIPRTools:::normalizePredictionConcentrationColumns(prediction_sd)
+    prediction_mean <- normalizePredictionConcentrationColumns(prediction_mean)
+    prediction_sd <- normalizePredictionConcentrationColumns(prediction_sd)
 
     # capture prediction means and SDs
     ml@prediction_means <- prediction_mean
     ml@prediction_sds <- prediction_sd
 
     # Generating Heatmap, exported as pdf
-    pred_heatmap <- FLIPRTools:::buildPredictionHeatmap(
+    pred_heatmap <- buildPredictionHeatmap(
       predictionMatrix = as.matrix(prediction_mean),
       rect_gp = grid::gpar(col = "white", lwd = 2),
       column_title = "Concentration", column_title_side = "bottom", name = "Prediction",
-      row_title = "FLIPRData", cluster_rows = FALSE, cluster_columns = FALSE,
+      row_title = "Compound", cluster_rows = FALSE, cluster_columns = FALSE,
       show_column_dend = FALSE
     )
 
-    fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_Heatmap", plateReadLabel = plateName, fileExtension = ".pdf")
+    fileName <- constructFileName(baseFileName = "CalFluxData_Tox_Heatmap", plateReadLabel = plateName, fileExtension = ".pdf")
 
     if (!is.null(pred_heatmap)) {
       pdf(fileName)
@@ -1617,20 +1619,20 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
       }
     }
 
-    FLIPRData_plot_list <- list()
+    compoundPlotList <- list()
 
     # concentration needs to be a character vector or factor
     orderedConcentrations <- colnames(prediction_mean)
     new_predictions$Concentration <- factor(as.character(new_predictions$Concentration), levels = orderedConcentrations)
 
-    uniqueFLIPRDataNames <- unique(new_predictions$FLIPRData)
+    uniqueCompoundNames <- unique(new_predictions$Compound)
 
 
-    for (i in seq_along(uniqueFLIPRDataNames)) {
-      FLIPRDataName <- uniqueFLIPRDataNames[i]
+    for (i in seq_along(uniqueCompoundNames)) {
+      compoundName <- uniqueCompoundNames[i]
 
       concDotPlot <- ggplot(
-        data = new_predictions[new_predictions$FLIPRData == FLIPRDataName, ],
+        data = new_predictions[new_predictions$Compound == compoundName, ],
         aes(x = Concentration, y = class)
       ) +
         geom_dotplot(binaxis = "y", stackdir = "center") +
@@ -1638,22 +1640,22 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
           fun.data = mean_sdl, fun.args = list(mult = 1),
           geom = "errorbar", color = "red", width = 0.2
         ) +
-        ggtitle(FLIPRDataName) + # aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
+        ggtitle(compoundName) + # aes(x = forcats::fct_inorder(Concentration)) + xlab("Concentration") +
         coord_cartesian(ylim = c(-0.1, 1.1)) +
         scale_y_continuous(breaks = seq(0, 1, 0.25)) +
         geom_point(size = 2) +
         ylab("Prediction")
 
-      FLIPRData_plot_list[[i]] <- concDotPlot
+      compoundPlotList[[i]] <- concDotPlot
     }
 
-    fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Tox_DotPlot", plateReadLabel = plateName, fileExtension = ".pdf")
+    fileName <- constructFileName(baseFileName = "CalFluxData_Tox_DotPlot", plateReadLabel = plateName, fileExtension = ".pdf")
 
-    if (length(FLIPRData_plot_list) > 0) {
+    if (length(compoundPlotList) > 0) {
       pdf(fileName)
-      for (firstToPlot in seq(1, length(FLIPRData_plot_list), by = 6)) {
-        lastToPlot <- min(firstToPlot + 5, length(FLIPRData_plot_list))
-        suppressMessages(do.call(gridExtra::grid.arrange, c(FLIPRData_plot_list[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
+      for (firstToPlot in seq(1, length(compoundPlotList), by = 6)) {
+        lastToPlot <- min(firstToPlot + 5, length(compoundPlotList))
+        suppressMessages(do.call(gridExtra::grid.arrange, c(compoundPlotList[firstToPlot:lastToPlot], nrow = 3, ncol = 2)))
       }
       dev.off()
     } else {
@@ -1661,9 +1663,9 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
     }
 
     pred_plot_df <- cbind(pred_plot_mean, pred_plot_sd)
-    importanceTable <- FLIPRTools:::getVariableImportanceTable(new_model)
+    importanceTable <- getVariableImportanceTable(new_model)
 
-    fileName <- FLIPRTools:::constructFileName(baseFileName = "MachineLearning_Predictions", plateReadLabel = plateName, fileExtension = "xlsx")
+    fileName <- constructFileName(baseFileName = "MachineLearning_Predictions", plateReadLabel = plateName, fileExtension = "xlsx")
 
     exportTabs <- list(
       Predictions = pred_plot_df,
@@ -1675,16 +1677,16 @@ FLIPRDataMachineLearning <- function(FLIPRData, masking = NULL) {
       rowNames = TRUE
     )
   }
-  FLIPRData@mlResults[[plateName]] <- ml
+  CalFluxData@mlResults[[plateName]] <- ml
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
-evaluateControlWellPCA <- function(FLIPRData) {
-  pcaRes <- FLIPRData@pcaResults
-  posCtrlKey <- FLIPRData@methodParameters$analysis_params$Positive_Control_Key
-  negCtrlKey <- FLIPRData@methodParameters$analysis_params$Negative_Control_Key
+evaluateControlWellPCA <- function(CalFluxData) {
+  pcaRes <- CalFluxData@pcaResults
+  posCtrlKey <- CalFluxData@methodParameters$analysis_params$Positive_Control_Key
+  negCtrlKey <- CalFluxData@methodParameters$analysis_params$Negative_Control_Key
 
   for (id in names(pcaRes)) {
     print(id)
@@ -1717,7 +1719,7 @@ evaluateControlWellPCA <- function(FLIPRData) {
 
 plotVariableImportance <- function(model, plateName){
   importance <- varImp(model, scale = TRUE)
-  fileName <- FLIPRTools:::constructFileName(baseFileName = "FLIPRData_Variable_Importance",
+  fileName <- constructFileName(baseFileName = "CalFluxData_Variable_Importance",
                                              plateReadLabel = plateName, fileExtension = ".pdf")
   pdf(fileName)
   print(plot(importance))

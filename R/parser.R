@@ -1,9 +1,9 @@
-##' Reads in FLIPR data and converts to plate class
+##' Reads in calcium flux data and converts to plate class
 ##' @param filename (string) path to file to read in
 ##' @return plate class object
 ##' @author Andrew Patt
 ##' @export
-read_FLIPR_data <- function(filename) {
+read_calflux_data <- function(filename) {
   raw_data <- readr::read_file(filename, locale = readr::locale(encoding = "ISO-8859-1"))
   raw_data <- unlist(strsplit(raw_data, split = "\r\n|\n"))
   raw_data <- gsub("\r$", "", raw_data)
@@ -30,7 +30,7 @@ read_FLIPR_data <- function(filename) {
     } else {
       temp_plate <- raw_data[statistic_dividers[i]:length(raw_data)]
     }
-    temp_plate_parsed <- FLIPRTools:::parse_individual_plate(temp_plate)
+    temp_plate_parsed <- parse_individual_plate(temp_plate)
     parsed_plate_list <- rlist::list.append(parsed_plate_list,temp_plate_parsed)
   }
 
@@ -148,7 +148,7 @@ parse_individual_plate <- function(plate){
 ##' @param plate an initialized plate object
 ##' @return returns a plate with data loaded.
 ##' @author Andrew Patt
-read_FLIPR_metadata <- function(filename, plate){
+read_calflux_metadata <- function(filename, plate){
   raw_data <- read.csv(filename)
   raw_data$Well <- sapply(raw_data$Well, function(x){
     rownum <- readr::parse_number(x)
@@ -163,18 +163,18 @@ read_FLIPR_metadata <- function(filename, plate){
   return(plate)
 }
 
-#' Reads an input FLIPRData parameter Excel file and returns a FLIPRData object.
-#' @param filename excel FLIPRData parmeter file
-#' @return returns a FLIPRData object ready for analysis. The FLIPRData file will not have plate data but rather just instructions on data
-#' analysis and input data files. This is typically the first function to run to generate an initialized FLIPRData object.
+#' Reads an input CalFluxData parameter Excel file and returns a CalFluxData object.
+#' @param filename excel CalFluxData parmeter file
+#' @return returns a CalFluxData object ready for analysis. The CalFluxData file will not have plate data but rather just instructions on data
+#' analysis and input data files. This is typically the first function to run to generate an initialized CalFluxData object.
 #' @export
-readFLIPRDataParameterFile <- function(filename) {
+readCalFluxDataParameterFile <- function(filename) {
   paramsDf <- openxlsx::read.xlsx(filename, sheet="Parameter_Info")
   analysisDf <- openxlsx::read.xlsx(filename, sheet="Analysis_Settings", colNames = F)
-  FLIPRData <- parseAnalysisSettings(analysisDf)
-  FLIPRData@parameterInfo = paramsDf
+  CalFluxData <- parseAnalysisSettings(analysisDf)
+  CalFluxData@parameterInfo = paramsDf
 
-  return(FLIPRData)
+  return(CalFluxData)
 }
 
 
@@ -188,7 +188,7 @@ parseAnalysisSettings <- function(analysisDf) {
   plateMaps <- list()
   analysisParams <- list()
 
-  FLIPRData = new("FLIPRData")
+  CalFluxData = new("CalFluxData")
   for(i in 1:nrow(analysisDf)) {
     if(analysisDf[i,1] == "Root_Directory") {
       rootDir = trimws(analysisDf[i,2])
@@ -207,7 +207,7 @@ parseAnalysisSettings <- function(analysisDf) {
         } else {
           plateFiles[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,2])
           plateMaps[[trimws(analysisDf[j,1])]] <- trimws(analysisDf[j,3])
-          FLIPRData@outputDirs <- c(FLIPRData@outputDirs, trimws(analysisDf[j,4]))
+          CalFluxData@outputDirs <- c(CalFluxData@outputDirs, trimws(analysisDf[j,4]))
         }
       }
     } else if(analysisDf[i,1] == "Processing") {
@@ -227,8 +227,8 @@ parseAnalysisSettings <- function(analysisDf) {
   allParamsList[['plate_file_list']] <- plateFiles
   allParamsList[['plate_map_list']] <- plateMaps
   allParamsList[['analysis_params']] <- analysisParams
-  FLIPRData@methodParameters = allParamsList
-  return(FLIPRData)
+  CalFluxData@methodParameters = allParamsList
+  return(CalFluxData)
 }
 
 parseProcessingParams <- function(processingDf) {

@@ -5,13 +5,13 @@
 \title{Converts categorical data to numeric values according to specified rules in the input parameter file.
 Note that this method will only run on parameters that are flagged as having categorical data.}
 \usage{
-applyCategoricalToNumeric(FLIPRData)
+applyCategoricalToNumeric(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
+\item{CalFluxData}{CalFluxData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the FLIPRData object categorical parameters converted to numeric values as specified in the parameter file.
+returns the CalFluxData object categorical parameters converted to numeric values as specified in the parameter file.
 }
 \description{
 Converts categorical data to numeric values according to specified rules in the input parameter file.

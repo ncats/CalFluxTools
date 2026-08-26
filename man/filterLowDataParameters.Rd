@@ -15,7 +15,7 @@ filterLowDataParameters(
 
 \item{thresholdType}{one of 'well_count' or 'well_percentage'}
 
-\item{missingDataThreshold}{}
+\item{missingDataThreshold}{maximum allowed missing value count for a parameter}
 }
 \value{
 a plate with updated plate data

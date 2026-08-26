@@ -8,7 +8,10 @@ getStatisticBarChartFromTransformedPlateSet(
   plateSet,
   sampleName,
   parameter,
-  tMethod = "log2Ratio"
+  tMethod = "log2Ratio",
+  showTitle = TRUE,
+  showXAxisTitle = TRUE,
+  showYAxisTitle = TRUE
 )
 }
 \arguments{
@@ -19,6 +22,12 @@ getStatisticBarChartFromTransformedPlateSet(
 \item{parameter}{the parameter for which to return data.}
 
 \item{tMethod}{the transoformation method for the transformed data.}
+
+\item{showTitle}{whether to show the plot title.}
+
+\item{showXAxisTitle}{whether to show the x-axis title.}
+
+\item{showYAxisTitle}{whether to show the y-axis title.}
 }
 \description{
 This method returns a ggplot object representing the transformed data, for a given sample name and parameter name.

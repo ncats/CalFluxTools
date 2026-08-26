@@ -44,7 +44,7 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, paramsToPlot, sho
   firstPlate <- T
   for(plateName in platePair) {
     plate <- plateSet@plates[[plateName]]
-    pList <- FLIPRTools:::trellisPlateView(plate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
+    pList <- trellisPlateView(plate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                               showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                               showLegend = showLegend, ggplot=ggplot, elementDividers = elementDividers,
                               plateTitle = plateName, showRowTitle = firstPlate)
@@ -58,10 +58,10 @@ trellisPlateSetViewsPairViews <- function(plateSet, platePair, paramsToPlot, sho
     if(nrow(plateSet@transformedPlateData[[tName]]) > 0) {
 
       # wrap the tranformed data in a plate and send off for plotting
-      tPlate <- FLIPRTools:::clonePlate(plate)
+      tPlate <- clonePlate(plate)
       tPlate@plateData <- plateSet@transformedPlateData[[tName]]
 
-      plotLists[[tName]] <- FLIPRTools:::trellisPlateView(plate = tPlate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
+      plotLists[[tName]] <- trellisPlateView(plate = tPlate, paramsToPlot = paramsToPlot, returnPlots = returnPlots,
                                             showRowColumnLabels = showRowColumnLabels, maxSatCount = maxSatCount,
                                              showLegend = T, ggplot=ggplot, elementDividers=elementDividers,
                                             scaleColors = c("green", "black", "red"), plateTitle = tName)
@@ -101,7 +101,7 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
   pList <- list()
 
   # get the mapping from statistic to a matrix for the stat, in plate format
-  matrixMap <- FLIPRTools:::rawPlateMatrixStatsToPlateFormat(plate=plate, parameter=paramsToPlot)
+  matrixMap <- rawPlateMatrixStatsToPlateFormat(plate=plate, parameters=paramsToPlot)
 
   firstInList = T
 
@@ -109,20 +109,20 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
 
     # build a Heatmap for each statistc
     if(!ggplot) {
-      p <- FLIPRTools:::getPlatePlotFromMatrix(matrixMap[[stat]], plotTitle = stat,
-                                        showRowColLabels = showRowColumnLabels,
+      p <- getPlatePlotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+                                        showRowColNames = showRowColumnLabels,
                                         maxSatCount = maxSatCount,
                                         showLegend =  showLegend)
     } else {
 
       if(!firstInList) {
-      p <- FLIPRTools:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+      p <- getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
                                          showRowColLabels = showRowColumnLabels,
                                          maxSatCount = maxSatCount,
                                          showLegend =  showLegend, elementDividers=elementDividers, scaleColors=scaleColors,
                                          showColTitle = F, xTitle = plateTitle, showRowTitle = showRowTitle, yTitle = stat)
       } else {
-        p <- FLIPRTools:::getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
+        p <- getPlateGgplotFromMatrix(matrixMap[[stat]], plotTitle = stat,
                                            showRowColLabels = showRowColumnLabels,
                                            maxSatCount = maxSatCount,
                                            showLegend =  showLegend, elementDividers=elementDividers,
@@ -148,7 +148,7 @@ trellisPlateView <- function(plate, paramsToPlot, showRowColumnLabels = T,
 #' returns a single ComplexHeatmap plate view
 #' @param plateFormatData a matrix with dimensions and data in plate orientation
 #' @param plotTitle a title to put over the plate heatmap
-#' @param showColNames a boolean to show or hide row and column labels.
+#' @param showRowColNames a boolean to show or hide row and column labels.
 #' @param showLegend a boolean to show or hide heatmap colorbar legend
 #' @param maxSatCount maximumn number of wells to allow color saturation in the plate heatmap. This sets color scale limits such that this number of wells saturate,
 #' evenly at both ends of the plate's value range. This reduces the effect of outliers on the color scale limits.
@@ -194,7 +194,7 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
     return(NULL)
   }
 
-  loHi <- FLIPRTools:::getPlateValueCutoffs(plateFormatData, maxSaturationCount = maxSatCount)
+  loHi <- getPlateValueCutoffs(plateFormatData, maxSaturationCount = maxSatCount)
   loEnd <- loHi[1]
   hiEnd <- loHi[2]
   colorLimits = c(loEnd, hiEnd)
@@ -276,10 +276,11 @@ getPlateGgplotFromMatrix <- function(plateFormatData, plotTitle = "", showRowCol
 #' @param sampleName the sample (compound) to return data for.
 #' @param parameter the parameter for which to return data.
 #' @param tMethod the transoformation method for the transformed data.
+#' @param showTitle whether to show the plot title.
+#' @param showXAxisTitle whether to show the x-axis title.
+#' @param showYAxisTitle whether to show the y-axis title.
 getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, parameter, tMethod = 'log2Ratio',
                                                         showTitle = TRUE, showXAxisTitle = TRUE, showYAxisTitle = TRUE) {
-  require('dplyr')
-
   wrapLabel <- function(x, width = 18) {
     paste(strwrap(x, width = width), collapse = "\n")
   }
@@ -295,17 +296,17 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
   #clone a transformed plate, and set transformed data as plate data
   plate <- plateSet@plates[[1]]
-  tPlate <- FLIPRTools:::clonePlate(plate)
+  tPlate <- clonePlate(plate)
   tPlate@plateData <- plateSet@transformedPlateData[[1]]
 
   # extract the plate data for a specified sample
-  data <- FLIPRTools:::getPlateDataForSample(plate = tPlate, sampleName, parameter)
+  data <- getPlateDataForSample(plate = tPlate, sampleName, parameter)
   # concentration should be categorical for bar chart
   data$Concentration <- as.character(data$Concentration)
 
   # set a temp name for the extracted parameter's value
   colnames(data)[ncol(data)] <- 'val'
-  data$val <- FLIPRTools:::coercePlateValuesToNumeric(data$val)
+  data$val <- coercePlateValuesToNumeric(data$val)
   data <- data[!is.na(data$Concentration) & data$Concentration != "" & !is.na(data$val), ]
   #compute mean and SD, via dplyr
   dataSum <- data.frame(
@@ -351,7 +352,7 @@ getStatisticBarChartFromTransformedPlateSet <- function(plateSet, sampleName, pa
 
 #' This method returns a trellis or table of bar chart plots for a set of samples and parameters.
 #' @param plateSet the plateset object containing the data.
-#' @param samples the vector of sample names (compounds, FLIPRData ids), for which to pull data.
+#' @param samples the vector of sample names or compound ids for which to pull data.
 #' @param parameters a vector of parameters for which to build plots.
 #' @param samplesIn indicates if samples should be represented as rows or columns.
 #' @param tMethod the transformation method to export
@@ -426,9 +427,9 @@ getBarChartTrellis <- function(plateSet, samples, parameters, samplesIn = 'rows'
 
 
 #' creates a correlation plot for paramters
-#' @param FLIPRData a FLIPRData object containing transformed data.
-getParameterCorrelationMatrix <- function(FLIPRData) {
-  tPlateData = data.frame(FLIPRData@plateSet@transformedPlateData)
+#' @param CalFluxData a CalFluxData object containing transformed data.
+getParameterCorrelationMatrix <- function(CalFluxData) {
+  tPlateData = data.frame(CalFluxData@plateSet@transformedPlateData)
   corrMat <- cor(tPlateData, use = 'pairwise.complete', method = 'pearson')
   corrP <- corrplot::corrplot(tPlateData)
 }

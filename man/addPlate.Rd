@@ -10,6 +10,8 @@ addPlate(plateset, plate, label)
 \item{plateset}{a plateset S4 object}
 
 \item{plate}{an plate S4 object to add to the plateset}
+
+\item{label}{name to assign to the plate within the plateset}
 }
 \description{
 Add a plate to a plateset

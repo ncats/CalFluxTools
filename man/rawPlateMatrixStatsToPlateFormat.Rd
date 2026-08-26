@@ -10,7 +10,7 @@ rawPlateMatrixStatsToPlateFormat(plate, parameters)
 \arguments{
 \item{plate}{The plate containing the data}
 
-\item{paramaters}{the vector of measured parameter to report on}
+\item{parameters}{the vector of measured parameters to report on}
 }
 \value{
 Returns a list of plate matrix objects, named by each of the measured parameters in parameter

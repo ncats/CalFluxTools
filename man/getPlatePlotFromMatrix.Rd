@@ -17,12 +17,12 @@ getPlatePlotFromMatrix(
 
 \item{plotTitle}{a title to put over the plate heatmap}
 
+\item{showRowColNames}{a boolean to show or hide row and column labels.}
+
 \item{showLegend}{a boolean to show or hide heatmap colorbar legend}
 
 \item{maxSatCount}{maximumn number of wells to allow color saturation in the plate heatmap. This sets color scale limits such that this number of wells saturate,
 evenly at both ends of the plate's value range. This reduces the effect of outliers on the color scale limits.}
-
-\item{showColNames}{a boolean to show or hide row and column labels.}
 }
 \description{
 returns a single ComplexHeatmap plate view

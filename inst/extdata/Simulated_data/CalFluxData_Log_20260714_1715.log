@@ -1,18 +1,18 @@
-INFO [2026-07-14 17:15:30] FLIPRData Analysis Started -- Log Initialized
+INFO [2026-07-14 17:15:30] CalFluxData Analysis Started -- Log Initialized
 INFO [2026-07-14 17:15:30] Reading input parameter excel file ===> /var/folders/7z/x3znsmd13nj_ky3wsbt3_sw4zzmgyq/T//RtmpOINzgw/file46e915dbf68e.xlsx
 SUCCESS [2026-07-14 17:15:30] Finished reading input parameter excel file
-INFO [2026-07-14 17:15:30] Working directory ==> /Users/pattac/Desktop/FLIPRTools/inst/extdata/Simulated_data//
+INFO [2026-07-14 17:15:30] Working directory ==> /Users/pattac/Desktop/CalFluxTools/inst/extdata/Simulated_data//
 INFO [2026-07-14 17:15:30] Loading plate data
 SUCCESS [2026-07-14 17:15:30] Finished loading plate data
 INFO [2026-07-14 17:15:30] Loading plate map well annotations
 SUCCESS [2026-07-14 17:15:30] Finished loading plate map well annotations
 INFO [2026-07-14 17:15:30] Number of plate pairs to process: 1
 INFO [2026-07-14 17:15:30] Initialize export directory...
-SUCCESS [2026-07-14 17:15:30] Initialized export directory... /Users/pattac/Desktop/FLIPRTools/inst/extdata/Simulated_data/Updated_Control_PC3_New_T5_FLIPRData_Analysis_20260714_1715.
+SUCCESS [2026-07-14 17:15:30] Initialized export directory... /Users/pattac/Desktop/CalFluxTools/inst/extdata/Simulated_data/Updated_Control_PC3_New_T5_CalFluxData_Analysis_20260714_1715.
 INFO [2026-07-14 17:15:30] 
 INFO [2026-07-14 17:15:30] ###############
 INFO [2026-07-14 17:15:30] Processing plate pair: 1
-INFO [2026-07-14 17:15:30] Output directory: /Users/pattac/Desktop/FLIPRTools/inst/extdata/Simulated_data/Updated_Control_PC3_New_T5_FLIPRData_Analysis_20260714_1715./1
+INFO [2026-07-14 17:15:30] Output directory: /Users/pattac/Desktop/CalFluxTools/inst/extdata/Simulated_data/Updated_Control_PC3_New_T5_CalFluxData_Analysis_20260714_1715./1
 INFO [2026-07-14 17:15:30] Starting Data Processing and Analysis methods
 INFO [2026-07-14 17:15:30] Masking empty and masked wells.
 SUCCESS [2026-07-14 17:15:30] Masked empty and masked wells.

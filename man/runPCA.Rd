@@ -2,24 +2,24 @@
 % Please edit documentation in R/analysis.R
 \name{runPCA}
 \alias{runPCA}
-\title{Runs a PCA on FLIPRData data}
+\title{Runs a PCA on CalFluxData data}
 \usage{
-runPCA(FLIPRData, dataType = "transformed", compoundIDList = NULL, scale = T)
+runPCA(CalFluxData, dataType = "transformed", compoundIDList = NULL, scale = T)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object containing data}
+\item{CalFluxData}{CalFluxData object containing data}
 
 \item{dataType}{c("transformed', 'raw', 'controls') to indicate if the data should be all transformed well data, all raw well data,
 or well data only from control wells.}
 
-\item{scale}{should the PCA be scaled. Default is TRUE.}
+\item{compoundIDList}{an optional vector of compound ids to use for PCA}
 
-\item{compoundList}{an optional vector of compounds ids to use for PCA}
+\item{scale}{should the PCA be scaled. Default is TRUE.}
 }
 \value{
 a list object containing 4 fields. 'Wells PCA' and 'Parameters PCA' contain the prcomp objects for running PCA on wells or parameters.
 The Annotations element is a data frame containing well annotations. The 'Parameter Names' element is a data frame containing parameter info.
 }
 \description{
-Runs a PCA on FLIPRData data
+Runs a PCA on CalFluxData data
 }

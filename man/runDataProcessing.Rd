@@ -2,20 +2,20 @@
 % Please edit documentation in R/analysis.R
 \name{runDataProcessing}
 \alias{runDataProcessing}
-\title{This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
+\title{This method is a wrapper method that performs all data processing operations according to the supplied CalFluxData Parameter File.
 The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.}
 \usage{
-runDataProcessing(FLIPRData, paired_analysis)
+runDataProcessing(CalFluxData, paired_analysis)
 }
 \arguments{
-\item{paired_analysis}{boolean specifying if plate pairs are used for baseline correction}
+\item{CalFluxData}{a CalFluxData object with loaded plate data and analysis settings.}
 
-\item{FLIPRDataParamterXlsxFilePath}{a file path and file name for the FLIPRData parameter xlsx file. All information required to process FLIPRData data is contained in this file.}
+\item{paired_analysis}{boolean specifying if plate pairs are used for baseline correction}
 }
 \value{
-Returns a FLIPRData objecdt with loaded and transformed data. During processing several output summary files will be exported.
+Returns a CalFluxData objecdt with loaded and transformed data. During processing several output summary files will be exported.
 }
 \description{
-This method is a wrapper method that performs all data processing operations according to the supplied FLIPRData Parameter File.
+This method is a wrapper method that performs all data processing operations according to the supplied CalFluxData Parameter File.
 The method will output data diagnostic plots and tables as specified in the parameter file. The transformed data will be read for classification analysis.
 }

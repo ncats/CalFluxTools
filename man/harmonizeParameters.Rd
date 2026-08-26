@@ -5,10 +5,10 @@
 \title{Makes sure that the reference plate read and the treatment plate read have the same parameters
 after possibly filtering based on data loss.}
 \usage{
-harmonizeParameters(FLIPRData)
+harmonizeParameters(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{the FLIPRData object having plate read pairs for comparison}
+\item{CalFluxData}{the CalFluxData object having plate read pairs for comparison}
 }
 \description{
 Makes sure that the reference plate read and the treatment plate read have the same parameters

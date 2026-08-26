@@ -4,13 +4,13 @@
 \alias{applyDataCoverageFilters}
 \title{This method optionally removes parameters that have a large amount of missing data, beyond specified levels.}
 \usage{
-applyDataCoverageFilters(FLIPRData)
+applyDataCoverageFilters(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
+\item{CalFluxData}{CalFluxData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the FLIPRData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
+returns the CalFluxData object with plate data reduced to parameters passing a minium data limit as specified in the parameter file.
 }
 \description{
 This method optionally removes parameters that have a large amount of missing data, beyond specified levels.

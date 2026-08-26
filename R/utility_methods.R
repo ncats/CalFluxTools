@@ -1,10 +1,12 @@
 #' Starts a log file.
+#'
+#' @param logLevel logger threshold to use while processing
 initializeLog <- function(logLevel="INFO") {
   logger::log_level(logLevel)
-  logFileName <- paste0(getwd(),"/FLIPRData_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
+  logFileName <- paste0(getwd(),"/CalFluxData_Log_",format(Sys.time(), "%Y%m%d_%H%M"), ".log")
   logger::log_appender(logger::appender_file(logFileName))
 
-  logger::log_info("FLIPRData Analysis Started -- Log Initialized")
+  logger::log_info("CalFluxData Analysis Started -- Log Initialized")
 }
 
 idleLog <- function() {
@@ -23,8 +25,8 @@ coercePlateValuesToNumeric <- function(x) {
   suppressWarnings(as.numeric(x))
 }
 
-initializedExportLocation <- function(FLIPRData) {
-  outDir <- constructFileName(baseFileName = paste0(FLIPRData@methodParameters$analysis_name, "_FLIPRData_Analysis"))
+initializedExportLocation <- function(CalFluxData) {
+  outDir <- constructFileName(baseFileName = paste0(CalFluxData@methodParameters$analysis_name, "_CalFluxData_Analysis"))
   path <- paste0(getwd(), "/", outDir)
   if(!dir.exists(path)) {
     dir.create(path)
@@ -50,7 +52,7 @@ constructFileName <- function(baseFileName, plateReadLabel = "", fileExtension =
 #'
 #' @param plateset a plateset S4 object
 #' @param plate an plate S4 object to add to the plateset
-#'
+#' @param label name to assign to the plate within the plateset
 #'
 #' @export
 addPlate <- function(plateset, plate, label) {
@@ -87,7 +89,7 @@ subsetPlateSet <- function(plateSet, plateIndicesToKeep) {
 #'
 #' @param plate plate on which to filter parameters with low data representation
 #' @param thresholdType one of 'well_count' or 'well_percentage'
-#' @param missingDataThreshold
+#' @param missingDataThreshold maximum allowed missing value count for a parameter
 #'
 #' @return a plate with updated plate data
 #' @export
@@ -108,7 +110,7 @@ filterLowDataParameters <- function(plate, thresholdType = 'well_count', missing
 #' Utility method to replace blank and NA data with replacement values.
 #' @param plateSet the plateset object to work on
 #' @param blankReplacements a list object with parameter abbreviation keys and replacement values
-#' @param naRelacements a list object with parameter abbreviations keys and replacement values
+#' @param naReplacements a list object with parameter abbreviations keys and replacement values
 #' @return a plateset object with plate data replaced according to input values
 replaceBlanksAndNAs <- function(plateSet, blankReplacements, naReplacements) {
 
@@ -313,7 +315,7 @@ runReferenceQC <- function(plateSet, rootExportDirectory, plateFile) {
 
 
 #' missingDataReport reports on plate missing values
-#' @param plate FLIPRData plate
+#' @param plate CalFluxData plate
 #' @param plateSize plate size, e.g. 384 (default)
 #' @return returns a dataframe with columns 'parameter', 'good_count', 'missing_count', 'na_count', 'zero_count'
 #' @export
@@ -346,7 +348,7 @@ missingDataReport <- function(plate, plateSize = 384) {
 }
 
 #' Calculate parameter coefficient of variation
-#' @param plate FLIPRData plate
+#' @param plate CalFluxData plate
 #' @param plateSize plate size, e.g. 384 (default)
 #' @return returns a dataframe with columns 'parameter' and 'CV'
 #' @export
@@ -440,8 +442,12 @@ harmonizeParametersAcrossPlates <- function(plateSet) {
 #' Transforms plate data based on a supplied plate set with a reference.
 #'
 #' @param plateSet a plateset with at least one reference and one experimental plate
+#' @param platePair a vector of plate names to compare
 #' @param method a transformation method, one of c('log2ratio', 'pct_control')
 #' @param bkgrdCorr a boolean that controls if there is subtraction of median background.
+#' @param bkgrdSamples optional sample names to use for background correction
+#' @param bkgrdMode background summary mode, currently median by default
+#' @param firstDataCol first column in plate data containing numeric response values
 #'
 #' @return returns a PlateSet object with an additional set of transformed data.
 #' @export
@@ -502,7 +508,7 @@ backgroundCorrection <- function(plate, bkgrdSamples = NULL, bkgrdMode = 'median
 #' according to plate dimensions containing data for a specific measured parameter
 #'
 #' @param plate The plate containing the data
-#' @param paramater the measured parameter to report on
+#' @param parameter the measured parameter to report on
 #'
 #' @return returns a matrix with dimensions corresponding to plate type. A01 is in upper left.
 rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
@@ -522,7 +528,7 @@ rawPlateMatrixStatToPlateFormat <- function(plate, parameter) {
 #' according to plate dimensions. The list of matrix objects is named according to a supplied vector of measured parameters
 #'
 #' @param plate The plate containing the data
-#' @param paramaters the vector of measured parameter to report on
+#' @param parameters the vector of measured parameters to report on
 #'
 #' @return Returns a list of plate matrix objects, named by each of the measured parameters in parameter
 rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
@@ -532,7 +538,7 @@ rawPlateMatrixStatsToPlateFormat <- function(plate, parameters) {
   map = list()
   if(nrow(plateData) == 384) {
 
-    rc <- FLIPRTools:::getRowAndColumnNames(384)
+    rc <- getRowAndColumnNames(384)
     i = 0
     for(stat in parameters) {
       i = i + 1
@@ -584,7 +590,7 @@ getRowAndColumnNames <- function(plateDim = 384) {
 #' Note that the staturated (beyond bound values) are split at the low and high ends of the bounds.
 #' That means that if 10 elements are allowed to 'saturate' (exceed bounds), 5 fall off the high end and 5 fall off the low end.
 #'
-#' The utility of this method is to set reFLIPRDatanable color scale bounds for heatmaps.
+#' The utility of this method is to set reasonable color scale bounds for heatmaps.
 #'
 #' @param plateMatrix input plate dimension matrix
 #' @param maxSaturationCount the number of points (plate wells) to fall off the returned scale (half will be off high end, half of these off the low end)
@@ -722,13 +728,13 @@ applyParameterAbbreviations <- function(plate, abbrInfo) {
 
 #' A utility method to replace the input AUC parameter name with a new name.
 #' The original text files contain unicode characters that not not well supported.
-#' @param FLIPRData the FLIPRData object to patch AUC parameter names
-#' @return returns a FLIPRData object with the AUC parameter names patched.
-aucParameterPatch <- function(FLIPRData) {
+#' @param CalFluxData the CalFluxData object to patch AUC parameter names
+#' @return returns a CalFluxData object with the AUC parameter names patched.
+aucParameterPatch <- function(CalFluxData) {
   # patch plate data
-  for(platename in names(FLIPRData@plateSet@plates)) {
+  for(platename in names(CalFluxData@plateSet@plates)) {
     i=1
-    plate <- FLIPRData@plateSet@plates[[platename]]
+    plate <- CalFluxData@plateSet@plates[[platename]]
     for(n in colnames(plate@plateData)) {
       if(startsWith(n, "Area Under Curve (RFU")) {
         colnames(plate@plateData)[i] <- "Area Under Curve (RFUs)"
@@ -743,11 +749,11 @@ aucParameterPatch <- function(FLIPRData) {
       i = i + 1
     }
 
-    FLIPRData@plateSet@plates[[platename]] <- plate
+    CalFluxData@plateSet@plates[[platename]] <- plate
   }
 
   # patch plate info
-  pInfo <- FLIPRData@parameterInfo
+  pInfo <- CalFluxData@parameterInfo
   i = 1
   for(i in 1:nrow(pInfo)) {
     n <- pInfo[i,1]
@@ -760,8 +766,8 @@ aucParameterPatch <- function(FLIPRData) {
     i = i + 1
   }
 
-  FLIPRData@parameterInfo <- pInfo
-  return(FLIPRData)
+  CalFluxData@parameterInfo <- pInfo
+  return(CalFluxData)
 }
 
 
@@ -776,10 +782,10 @@ getPlateDataByWellSet <- function(plate, wellSet) {
 }
 
 #' This function exports a paired t-test result.
-#'  @param FLIPRData a FLIPRData object on which paired ttest has been run
-#'  @param ttestResult a dataframe represenint the ttest result
-#'  @param fileName the t-test result ouput file name.
-exportPairedTTestResult <- function(FLIPRData, ttestResult, fileName) {
+#' @param CalFluxData a CalFluxData object on which paired ttest has been run
+#' @param ttestResult a dataframe representing the ttest result
+#' @param fileName the t-test result output file name.
+exportPairedTTestResult <- function(CalFluxData, ttestResult, fileName) {
   # pivot on concentration
   # Sample	Conc	Treatment	Parameter	Condition	TestMethod	T	pValue	log2FoldChange	adjP	-log10(adjP)
   tResSmall <- ttestResult[,c(1,2,4,8,10,9,11)]
@@ -841,7 +847,7 @@ exportPairedTTestResult <- function(FLIPRData, ttestResult, fileName) {
 
   fileName = format(Sys.time(), "Ttest_Results_%Y%m%d_%H%M.xlsx")
 
-  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = FLIPRData@plateSet@plateNames[2],
+  fileName = constructFileName(baseFileName = "Ttest_Results", plateReadLabel = CalFluxData@plateSet@plateNames[2],
                                fileExtension = "xlsx")
 
   # lets add the unpivoted table
@@ -852,22 +858,22 @@ exportPairedTTestResult <- function(FLIPRData, ttestResult, fileName) {
 
 
 #' A utility method to export transformed data. The transformed data represents
-#' change between the FLIPRData treated state and teh control/untreated state.
-#' @param FLIPRData a FLIPRData object from which to export transformed data.
+#' change between the CalFluxData treated state and teh control/untreated state.
+#' @param CalFluxData a CalFluxData object from which to export transformed data.
 #' @export
-exportTransformedData <- function(FLIPRData) {
-  transformedNames <- names(FLIPRData@plateSet@transformedPlateData)
+exportTransformedData <- function(CalFluxData) {
+  transformedNames <- names(CalFluxData@plateSet@transformedPlateData)
   currentTfName <- transformedNames[length(transformedNames)]
-  data <- data.frame(FLIPRData@plateSet@transformedPlateData[[currentTfName]])
+  data <- data.frame(CalFluxData@plateSet@transformedPlateData[[currentTfName]])
 
-  wellAnn <- FLIPRData@plateSet@plates[[1]]@plateAnnotMap
+  wellAnn <- CalFluxData@plateSet@plates[[1]]@plateAnnotMap
 
   data <- cbind(wellAnn, data)
 
   dataList <- list()
   dataList[['Transformed_Data']] <- data
 
-  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = FLIPRData@plateSet@plateNames[1],
+  fileName <- constructFileName(baseFileName = "Transformed_Response_Data", plateReadLabel = CalFluxData@plateSet@plateNames[1],
                                 fileExtension = "xlsx")
 
   openxlsx::write.xlsx(dataList, file=fileName)
@@ -875,22 +881,21 @@ exportTransformedData <- function(FLIPRData) {
 
 
 #' Exports a colelction of random forest results into one file, along with Benchmark Dose.
-#' @param FLIPRData The FLIPRData object containing the MachineLearning Results
+#' @param CalFluxData The CalFluxData object containing the MachineLearning Results
 #' @export
-exportMachineLearningResults <- function(FLIPRData) {
+exportMachineLearningResults <- function(CalFluxData) {
 
-  fileName <- FLIPRTools:::constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
+  fileName <- constructFileName(baseFileName = "Predictions_RF_Combined", plateReadLabel = "",
                                 fileExtension = "xlsx")
 
   predResults = list()
   bmd <- NULL
   iter = 1
 
-  for(resName in names(FLIPRData@mlResults)) {
+  for(resName in names(CalFluxData@mlResults)) {
 
-    res <- normalizePredictionConcentrationColumns(FLIPRData@mlResults[[resName]]@prediction_means)
+    res <- normalizePredictionConcentrationColumns(CalFluxData@mlResults[[resName]]@prediction_means)
 
-    print(colnames(res))
     resName <- paste0(resName, "_pred_means")
     predResults[[resName]] <- res
 
@@ -904,18 +909,18 @@ exportMachineLearningResults <- function(FLIPRData) {
     iter = iter + 1
   }
 
-  colnames(bmd) <- names(FLIPRData@mlResults)
+  colnames(bmd) <- names(CalFluxData@mlResults)
   bmdList <- list(bench_mark_dose=bmd)
   predResults <- append(bmdList, predResults)
 
-  for(resName in names(FLIPRData@mlResults)) {
-    res <- normalizePredictionConcentrationColumns(FLIPRData@mlResults[[resName]]@prediction_sds)
+  for(resName in names(CalFluxData@mlResults)) {
+    res <- normalizePredictionConcentrationColumns(CalFluxData@mlResults[[resName]]@prediction_sds)
     resName <- paste0(resName, "_pred_sds")
     predResults[[resName]] <- res
   }
 
-  for(resName in names(FLIPRData@mlResults)) {
-    res <- FLIPRData@mlResults[[resName]]@predictions
+  for(resName in names(CalFluxData@mlResults)) {
+    res <- CalFluxData@mlResults[[resName]]@predictions
     resName <- paste0(resName, "_pred_full")
     predResults[[resName]] <- res
   }
@@ -1013,10 +1018,10 @@ buildPredictionHeatmap <- function(predictionMatrix, ...) {
   }
 
 
-#' Exports prediction heatmaps for each plate read. These are generated based on the FLIPRData classes mlResults slot.
-#' @param FLIPRData The FLIPRData object containing Random Forest result.
+#' Exports prediction heatmaps for each plate read. These are generated based on the CalFluxData classes mlResults slot.
+#' @param CalFluxData The CalFluxData object containing Random Forest result.
 #' @export
-exportRfPredictionHeatmaps <- function(FLIPRData) {
+exportRfPredictionHeatmaps <- function(CalFluxData) {
   predResults = list()
   bmd <- NULL
   iter = 1
@@ -1024,8 +1029,8 @@ exportRfPredictionHeatmaps <- function(FLIPRData) {
   rfRes = NULL
   timeLabels = c()
   levels = c()
-  for(resName in names(FLIPRData@mlResults)) {
-    res <- FLIPRData@mlResults[[resName]]@prediction_means
+  for(resName in names(CalFluxData@mlResults)) {
+    res <- CalFluxData@mlResults[[resName]]@prediction_means
     res <- normalizePredictionConcentrationColumns(res)
     if(iter == 1) {
       rfRes = res
@@ -1050,7 +1055,7 @@ exportRfPredictionHeatmaps <- function(FLIPRData) {
     return(invisible(NULL))
   }
 
-  fileName <- FLIPRTools:::constructFileName(paste0(FLIPRData@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
+  fileName <- constructFileName(paste0(CalFluxData@methodParameters$analysis_name, "_Rf_Predictions_Heatmap"),
                           fileExtension = "pdf")
 
   pdf(file=fileName, width=13, height=6)

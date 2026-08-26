@@ -6,6 +6,9 @@
 \usage{
 initializeLog(logLevel = "INFO")
 }
+\arguments{
+\item{logLevel}{logger threshold to use while processing}
+}
 \description{
 Starts a log file.
 }

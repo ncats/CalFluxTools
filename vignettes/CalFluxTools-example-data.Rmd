@@ -1,8 +1,8 @@
 ---
-title: "Using the FLIPRTools Example Data"
+title: "Using the CalFluxTools Example Data"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Using the FLIPRTools Example Data}
+  %\VignetteIndexEntry{Using the CalFluxTools Example Data}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,8 +16,8 @@ knitr::opts_chunk$set(
 )
 ```
 
-FLIPRTools provides a workflow for parsing, quality-controlling,
-visualizing, transforming, and analyzing FLIPR plate-reader data. It parses FLIPR data in the
+CalFluxTools provides a workflow for parsing, quality-controlling,
+visualizing, transforming, and analyzing calcium flux plate-reader data. It parses calcium flux data in the
 `statAll` format together with plate maps and a parameter manifest, organizes
 the data into plate and plate-set objects, applies processing rules such as
 masking, parameter filtering, categorical encoding, blank or missing-value
@@ -25,25 +25,25 @@ replacement, and baseline-normalized transformations, and supports downstream
 outputs including data completeness reports, plate heatmaps, bar charts,
 z-prime factor summaries, PCA, and random-forest classification results.
 
-This vignette walks through the analysis of example FLIPR files distributed with
-FLIPRTools. The package includes plate-reader output files in `statAll`
+This vignette walks through the analysis of example calcium flux files distributed with
+CalFluxTools. The package includes plate-reader output files in `statAll`
 format, matching plate maps, and Excel parameter manifests under
 `inst/extdata`.
 
 ```{r libraries}
-library(FLIPRTools)
+library(CalFluxTools)
 library(ggplot2)
 ```
 
 ## Locate the Example Files
 
-Use `system.file()` to locate packaged data after FLIPRTools has been
+Use `system.file()` to locate packaged data after CalFluxTools has been
 installed. The helper below also works when knitting this vignette from the
 source tree.
 
 ```{r locate-files}
 example_file <- function(...) {
-  installed_path <- system.file("extdata", ..., package = "FLIPRTools")
+  installed_path <- system.file("extdata", ..., package = "CalFluxTools")
   if (nzchar(installed_path)) {
     return(installed_path)
   }
@@ -57,7 +57,7 @@ example_file <- function(...) {
     return(normalizePath(existing_paths[[1]], mustWork = TRUE))
   }
 
-  stop("Could not locate FLIPRTools example data.")
+  stop("Could not locate CalFluxTools example data.")
 }
 
 simulated_dir <- example_file("Simulated_data")
@@ -85,7 +85,7 @@ plate_map_file <- example_file(
 )
 parameter_file <- example_file(
   "Simulated_data",
-  "FLIPR_Parameter_selection_Control_PC3_New_T5.xlsx"
+  "CalFlux_Parameter_selection_Control_PC3_New_T5.xlsx"
 )
 ```
 
@@ -149,27 +149,27 @@ openxlsx::writeData(
 )
 openxlsx::saveWorkbook(manifest, patched_parameter_file, overwrite = TRUE)
 
-flipr_data <- processFLIPRData(patched_parameter_file)
+calflux_data <- processCalFluxData(patched_parameter_file)
 ```
 
-Although it is easiest to run the package using the `processFLIPRData` function, lower-level functions are also available for data parsing, transformation and visualization.
+Although it is easiest to run the package using the `processCalFluxData` function, lower-level functions are also available for data parsing, transformation and visualization.
 
 ## Parse Plate Reads
 
-Use `read_FLIPR_data()` to parse each `statAll` file into a `plate` S4
+Use `read_calflux_data()` to parse each `statAll` file into a `plate` S4
 object. The metadata reader used by the package is currently internal, so this
-example uses `FLIPRTools:::` to attach the plate map in the same way as the
+example uses `CalFluxTools:::` to attach the plate map in the same way as the
 analysis wrapper.
 
 ```{r parse-plates}
-baseline_plate <- read_FLIPR_data(baseline_file)
-postdose_plate <- read_FLIPR_data(postdose_file)
+baseline_plate <- read_calflux_data(baseline_file)
+postdose_plate <- read_calflux_data(postdose_file)
 
-baseline_plate <- FLIPRTools:::read_FLIPR_metadata(
+baseline_plate <- CalFluxTools:::read_calflux_metadata(
   plate_map_file,
   baseline_plate
 )
-postdose_plate <- FLIPRTools:::read_FLIPR_metadata(
+postdose_plate <- CalFluxTools:::read_calflux_metadata(
   plate_map_file,
   postdose_plate
 )
@@ -226,7 +226,7 @@ knitr::kable(head(cv_report, 10))
 ## Transform the Plate Pair
 
 Create a `plateset`, add the baseline and post-dose plates, then compute the
-log2 ratio for each parameter. Because `read_FLIPR_data()` retains `well_id`
+log2 ratio for each parameter. Because `read_calflux_data()` retains `well_id`
 as the first column, set `firstDataCol = 2`.
 
 ```{r transform-data}
@@ -299,6 +299,6 @@ stemonix_manifest <- data.frame(file = list.files(stemonix_dir))
 knitr::kable(stemonix_manifest)
 ```
 
-For full report generation, use a patched manifest with `processFLIPRData()`.
+For full report generation, use a patched manifest with `processCalFluxData()`.
 For focused exploratory work, parse the `statAll` files, attach the plate map,
 and call the lower-level QC and transformation helpers shown above.

@@ -4,10 +4,10 @@
 \alias{zFactor}
 \title{Utility analysis method to generate z-prime factor data.}
 \usage{
-zFactor(FLIPRData, dataType = "transformed")
+zFactor(CalFluxData, dataType = "transformed")
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)}
+\item{CalFluxData}{CalFluxData object on which to perform the z-prime factor analysis. z-prime = 1- 3*(abs(posCtrlMean-negCtrlMean))/(posCtrlSD + negCtrlSD)}
 
 \item{dataType}{Either transformed or raw data.}
 }

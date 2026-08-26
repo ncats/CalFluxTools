@@ -10,7 +10,7 @@ rawPlateMatrixStatToPlateFormat(plate, parameter)
 \arguments{
 \item{plate}{The plate containing the data}
 
-\item{paramater}{the measured parameter to report on}
+\item{parameter}{the measured parameter to report on}
 }
 \value{
 returns a matrix with dimensions corresponding to plate type. A01 is in upper left.

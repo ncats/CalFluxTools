@@ -3,14 +3,14 @@
 \name{exportTransformedData}
 \alias{exportTransformedData}
 \title{A utility method to export transformed data. The transformed data represents
-change between the FLIPRData treated state and teh control/untreated state.}
+change between the CalFluxData treated state and teh control/untreated state.}
 \usage{
-exportTransformedData(FLIPRData)
+exportTransformedData(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{a FLIPRData object from which to export transformed data.}
+\item{CalFluxData}{a CalFluxData object from which to export transformed data.}
 }
 \description{
 A utility method to export transformed data. The transformed data represents
-change between the FLIPRData treated state and teh control/untreated state.
+change between the CalFluxData treated state and teh control/untreated state.
 }

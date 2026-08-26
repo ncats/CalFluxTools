@@ -4,10 +4,10 @@
 \alias{runTTest}
 \title{Generic T test function for multiple experimental designs}
 \usage{
-runTTest(FLIPRData)
+runTTest(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object having loaded plate data.}
+\item{CalFluxData}{CalFluxData object having loaded plate data.}
 }
 \value{
 a dataframe containing stat results for each parameter, for each well.

@@ -6,10 +6,10 @@
 This collects information on parameter variation (standard deviation, and coefficient of variation)
 and z-scores for each parameter and each well help to identy outlier/bad wells that we might want to 'mask'}
 \usage{
-runQcForReferencePlate(FLIPRData)
+runQcForReferencePlate(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{the FLIPRData object having a platepair object with a loaded reference plate}
+\item{CalFluxData}{the CalFluxData object having a platepair object with a loaded reference plate}
 }
 \description{
 Runs quality control on the reference (control) plate read, prior to treatment.

@@ -5,10 +5,10 @@
 \title{Exports views of the plate data, for each parameter, as a pdf file.
 The exported file will include the date and time of file creation.}
 \usage{
-exportPlateViews(FLIPRData)
+exportPlateViews(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{a FLIPRData object containing plate data and having transformed data}
+\item{CalFluxData}{a CalFluxData object containing plate data and having transformed data}
 }
 \description{
 Exports views of the plate data, for each parameter, as a pdf file.

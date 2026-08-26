@@ -2,13 +2,13 @@
 % Please edit documentation in R/utility_methods.R
 \name{exportRfPredictionHeatmaps}
 \alias{exportRfPredictionHeatmaps}
-\title{Exports prediction heatmaps for each plate read. These are generated based on the FLIPRData classes mlResults slot.}
+\title{Exports prediction heatmaps for each plate read. These are generated based on the CalFluxData classes mlResults slot.}
 \usage{
-exportRfPredictionHeatmaps(FLIPRData)
+exportRfPredictionHeatmaps(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{The FLIPRData object containing Random Forest result.}
+\item{CalFluxData}{The CalFluxData object containing Random Forest result.}
 }
 \description{
-Exports prediction heatmaps for each plate read. These are generated based on the FLIPRData classes mlResults slot.
+Exports prediction heatmaps for each plate read. These are generated based on the CalFluxData classes mlResults slot.
 }

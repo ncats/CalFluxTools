@@ -2,18 +2,18 @@
 % Please edit documentation in R/analysis.R
 \name{assessDataCompleteness}
 \alias{assessDataCompleteness}
-\title{Runs an analysis on the FLIPRData object to report on data coverage for each parameter.
-The missing data report is entered into the FLIPRData object.}
+\title{Runs an analysis on the CalFluxData object to report on data coverage for each parameter.
+The missing data report is entered into the CalFluxData object.}
 \usage{
-assessDataCompleteness(FLIPRData)
+assessDataCompleteness(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
+\item{CalFluxData}{CalFluxData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the FLIPRData object containing the missing data report in the dataCoverageTables slot
+returns the CalFluxData object containing the missing data report in the dataCoverageTables slot
 }
 \description{
-Runs an analysis on the FLIPRData object to report on data coverage for each parameter.
-The missing data report is entered into the FLIPRData object.
+Runs an analysis on the CalFluxData object to report on data coverage for each parameter.
+The missing data report is entered into the CalFluxData object.
 }

@@ -2,16 +2,16 @@
 % Please edit documentation in R/analysis.R
 \name{runPairedTTest}
 \alias{runPairedTTest}
-\title{Performes a paired t-test to compare FLIPRData treated samples from the reference/control state.}
+\title{Performes a paired t-test to compare CalFluxData treated samples from the reference/control state.}
 \usage{
-runPairedTTest(FLIPRData)
+runPairedTTest(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object having loaded plate data.}
+\item{CalFluxData}{CalFluxData object having loaded plate data.}
 }
 \value{
 a dataframe containing stat results for each parameter, for each well.
 }
 \description{
-Performes a paired t-test to compare FLIPRData treated samples from the reference/control state.
+Performes a paired t-test to compare CalFluxData treated samples from the reference/control state.
 }

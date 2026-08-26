@@ -4,13 +4,13 @@
 \alias{filterToSelectedParameters}
 \title{Reduces the plate data object to only contain data for the subset of selected parameters.}
 \usage{
-filterToSelectedParameters(FLIPRData)
+filterToSelectedParameters(CalFluxData)
 }
 \arguments{
-\item{FLIPRData}{FLIPRData object initialized with parameter file, plate data and plate maps loaded.}
+\item{CalFluxData}{CalFluxData object initialized with parameter file, plate data and plate maps loaded.}
 }
 \value{
-returns the FLIPRData object with working set of plate data reduced to parameters specified in the parameter file.
+returns the CalFluxData object with working set of plate data reduced to parameters specified in the parameter file.
 }
 \description{
 Reduces the plate data object to only contain data for the subset of selected parameters.
