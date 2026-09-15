@@ -1,0 +1,304 @@
+---
+title: "Using the CalFluxTools Example Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using the CalFluxTools Example Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+CalFluxTools provides a workflow for parsing, quality-controlling,
+visualizing, transforming, and analyzing calcium flux plate-reader data. It parses calcium flux data in the
+`statAll` format together with plate maps and a parameter manifest, organizes
+the data into plate and plate-set objects, applies processing rules such as
+masking, parameter filtering, categorical encoding, blank or missing-value
+replacement, and baseline-normalized transformations, and supports downstream
+outputs including data completeness reports, plate heatmaps, bar charts,
+z-prime factor summaries, PCA, and random-forest classification results.
+
+This vignette walks through the analysis of example calcium flux files distributed with
+CalFluxTools. The package includes plate-reader output files in `statAll`
+format, matching plate maps, and Excel parameter manifests under
+`inst/extdata`.
+
+```{r libraries}
+library(CalFluxTools)
+library(ggplot2)
+```
+
+## Locate the Example Files
+
+Use `system.file()` to locate packaged data after CalFluxTools has been
+installed. The helper below also works when knitting this vignette from the
+source tree.
+
+```{r locate-files}
+example_file <- function(...) {
+  installed_path <- system.file("extdata", ..., package = "CalFluxTools")
+  if (nzchar(installed_path)) {
+    return(installed_path)
+  }
+
+  source_paths <- c(
+    file.path("..", "inst", "extdata", ...),
+    file.path("inst", "extdata", ...)
+  )
+  existing_paths <- source_paths[file.exists(source_paths)]
+  if (length(existing_paths) > 0) {
+    return(normalizePath(existing_paths[[1]], mustWork = TRUE))
+  }
+
+  stop("Could not locate CalFluxTools example data.")
+}
+
+simulated_dir <- example_file("Simulated_data")
+stemonix_dir <- example_file("Stemonix_05_2022")
+
+list.files(simulated_dir)
+list.files(stemonix_dir)
+```
+
+The simulated dataset contains one baseline read, one post-dose read, one
+plate map, and one manifest describing the intended analysis parameters. This enables us to use the "paired analysis" pipeline provided by the package.
+
+```{r simulated-paths}
+baseline_file <- example_file(
+  "Simulated_data",
+  "Control_plate1_Test1_BL_n001_Pro2_New_T1.statAll"
+)
+postdose_file <- example_file(
+  "Simulated_data",
+  "Control_plate1_Test1_30min_n001_Pro2_New_T1.statAll"
+)
+plate_map_file <- example_file(
+  "Simulated_data",
+  "Control_Plate_map_1_PC3_New_T2.csv"
+)
+parameter_file <- example_file(
+  "Simulated_data",
+  "CalFlux_Parameter_selection_Control_PC3_New_T5.xlsx"
+)
+```
+
+## Inspect the Parameter Manifest
+
+The manifest stores analysis settings and per-parameter processing rules.
+The copy currently included with this source tree records the original
+development root directory, so the low-level examples below read the files
+directly from `inst/extdata`.
+
+```{r parameter-manifest}
+analysis_settings <- openxlsx::read.xlsx(
+  parameter_file,
+  sheet = "Analysis_Settings",
+  colNames = FALSE
+)
+analysis_settings <- analysis_settings[!is.na(analysis_settings$X1), ]
+
+knitr::kable(
+  analysis_settings[, c("X1", "X2", "X3", "X4", "X5")],
+  col.names = c("Setting", "Value", "Value 2", "Value 3", "Value 4")
+)
+
+parameter_info <- openxlsx::read.xlsx(parameter_file, sheet = "Parameter_Info")
+knitr::kable(head(parameter_info[, c("Statistic", "Suggested_Abbreviation", "Use")]))
+```
+
+If you want to run the full wrapper from this example data, first create a
+new manifest that points at the installed `extdata` directory and the
+filenames distributed with the package.
+
+```{r patch-manifest, eval = FALSE}
+patched_parameter_file <- tempfile(fileext = ".xlsx")
+file.copy(parameter_file, patched_parameter_file, overwrite = TRUE)
+
+manifest <- openxlsx::loadWorkbook(patched_parameter_file)
+settings <- openxlsx::read.xlsx(
+  patched_parameter_file,
+  sheet = "Analysis_Settings",
+  colNames = FALSE
+)
+
+settings[settings$X1 == "Root_Directory", "X2"] <- paste0(
+  normalizePath(simulated_dir),
+  .Platform$file.sep
+)
+settings[
+  settings$X1 == "Control_plate1_Test1_BL_n001_Pro2_New_T1.statAll",
+  "X2"
+] <- "Control_plate1_Test1_BL_n001_Pro2_New_T1.statAll"
+settings[
+  settings$X1 == "Control_plate1_Test1_30min_n001_Pro2_New_T1.statAll",
+  "X2"
+] <- "Control_plate1_Test1_30min_n001_Pro2_New_T1.statAll"
+
+openxlsx::writeData(
+  manifest,
+  sheet = "Analysis_Settings",
+  x = settings,
+  colNames = FALSE
+)
+openxlsx::saveWorkbook(manifest, patched_parameter_file, overwrite = TRUE)
+
+calflux_data <- processCalFluxData(patched_parameter_file)
+```
+
+Although it is easiest to run the package using the `processCalFluxData` function, lower-level functions are also available for data parsing, transformation and visualization.
+
+## Parse Plate Reads
+
+Use `read_calflux_data()` to parse each `statAll` file into a `plate` S4
+object. The metadata reader used by the package is currently internal, so this
+example uses `CalFluxTools:::` to attach the plate map in the same way as the
+analysis wrapper.
+
+```{r parse-plates}
+baseline_plate <- read_calflux_data(baseline_file)
+postdose_plate <- read_calflux_data(postdose_file)
+
+baseline_plate <- CalFluxTools:::read_calflux_metadata(
+  plate_map_file,
+  baseline_plate
+)
+postdose_plate <- CalFluxTools:::read_calflux_metadata(
+  plate_map_file,
+  postdose_plate
+)
+
+plate_summary <- data.frame(
+  read = c("Baseline", "Post-dose"),
+  plate_id = c(baseline_plate@plateId, postdose_plate@plateId),
+  wells = c(length(baseline_plate@wellIds), length(postdose_plate@wellIds)),
+  parameters = c(length(baseline_plate@parameters), length(postdose_plate@parameters))
+)
+knitr::kable(plate_summary)
+```
+
+The plate map provides the well-level sample annotations used for masking,
+controls, test samples, concentrations, and plotting.
+
+```{r summarize-plate-map}
+plate_map <- baseline_plate@plateAnnotMap
+
+well_type_summary <- as.data.frame(table(plate_map$WellType))
+names(well_type_summary) <- c("WellType", "Wells")
+knitr::kable(well_type_summary)
+
+compound_summary <- aggregate(
+  Well ~ Compound + WellType,
+  data = plate_map,
+  FUN = length
+)
+names(compound_summary)[names(compound_summary) == "Well"] <- "Wells"
+compound_summary <- compound_summary[
+  order(compound_summary$WellType, compound_summary$Compound),
+]
+knitr::kable(head(compound_summary, 12))
+```
+
+## Check Data Completeness
+
+`missingDataReport()` summarizes missing, blank, empty, masked, and usable
+wells per parameter. `calculateParamCV()` provides a quick coefficient of
+variation screen on the same plate object.
+
+```{r quality-summaries}
+missing_report <- missingDataReport(baseline_plate)
+missing_report <- missing_report[
+  order(missing_report$Missing_Count, decreasing = TRUE),
+]
+knitr::kable(head(missing_report, 10))
+
+cv_report <- calculateParamCV(baseline_plate)
+cv_report <- cv_report[order(cv_report$CV, decreasing = TRUE, na.last = TRUE), ]
+knitr::kable(head(cv_report, 10))
+```
+
+## Transform the Plate Pair
+
+Create a `plateset`, add the baseline and post-dose plates, then compute the
+log2 ratio for each parameter. Because `read_calflux_data()` retains `well_id`
+as the first column, set `firstDataCol = 2`.
+
+```{r transform-data}
+plate_set <- new("plateset")
+plate_set <- addPlate(plate_set, baseline_plate, "Baseline")
+plate_set <- addPlate(plate_set, postdose_plate, "PostDose")
+
+plate_set <- dataTransform(
+  plate_set,
+  platePair = c("Baseline", "PostDose"),
+  method = "log2ratio",
+  firstDataCol = 2
+)
+
+names(plate_set@transformedPlateData)
+
+log2ratio <- plate_set@transformedPlateData[[1]]
+preview_parameters <- colnames(log2ratio)[seq_len(min(3, ncol(log2ratio)))]
+
+knitr::kable(
+  head(
+    cbind(Well = baseline_plate@wellIds, log2ratio[, preview_parameters, drop = FALSE]),
+    10
+  )
+)
+```
+
+Plotting the transformed values by row and column helps check whether a signal
+is spatially patterned across the plate.
+
+```{r transformed-heatmap}
+plot_parameter <- "Mean Peak Amplitude (RFU)"
+
+plot_df <- data.frame(
+  Well = baseline_plate@wellIds,
+  Row = substr(baseline_plate@wellIds, 1, 1),
+  Column = as.integer(sub("^[A-P]", "", baseline_plate@wellIds)),
+  Value = as.numeric(log2ratio[[plot_parameter]])
+)
+
+ggplot(plot_df, aes(x = Column, y = Row, fill = Value)) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  coord_fixed() +
+  scale_y_discrete(limits = rev(LETTERS[1:16])) +
+  scale_x_continuous(breaks = seq(1, 24, by = 2)) +
+  scale_fill_gradient2(
+    low = "#2C7BB6",
+    mid = "white",
+    high = "#D7191C",
+    midpoint = 0,
+    na.value = "grey90"
+  ) +
+  labs(
+    title = paste("Log2 ratio:", plot_parameter),
+    x = "Column",
+    y = "Row",
+    fill = "Log2 ratio"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid = element_blank())
+```
+
+## Reuse the Workflow
+
+The same workflow can be applied to the Stemonix May 2022 files in
+`inst/extdata/Stemonix_05_2022` by swapping the file paths:
+
+```{r stemonix-manifest}
+stemonix_manifest <- data.frame(file = list.files(stemonix_dir))
+knitr::kable(stemonix_manifest)
+```
+
+For full report generation, use a patched manifest with `processCalFluxData()`.
+For focused exploratory work, parse the `statAll` files, attach the plate map,
+and call the lower-level QC and transformation helpers shown above.
