@@ -223,7 +223,7 @@ cv_report <- cv_report[order(cv_report$CV, decreasing = TRUE, na.last = TRUE), ]
 knitr::kable(head(cv_report, 10))
 ```
 
-## Transform the Plate Pair
+## Transform and Visualize data
 
 Create a `plateset`, add the baseline and post-dose plates, then compute the
 log2 ratio for each parameter. Because `read_calflux_data()` retains `well_id`
@@ -258,7 +258,7 @@ Plotting the transformed values by row and column helps check whether a signal
 is spatially patterned across the plate.
 
 ```{r transformed-heatmap}
-plot_parameter <- "Mean Peak Amplitude (RFU)"
+plot_parameter <- "Rise slope S.D. (RFU/s)"
 
 plot_df <- data.frame(
   Well = baseline_plate@wellIds,
