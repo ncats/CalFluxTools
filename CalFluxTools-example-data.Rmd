@@ -30,6 +30,30 @@ CalFluxTools. The package includes plate-reader output files in `statAll`
 format, matching plate maps, and Excel parameter manifests under
 `inst/extdata`.
 
+## Run the Complete Workflow
+
+With a properly formatted parameter manifest and the data files referenced by
+that manifest in place, **this is the only line of code needed to run the
+CalFluxTools workflow**:
+
+```{r complete-workflow, eval = FALSE}
+calflux_data <- CalFluxTools::processCalFluxData("path/to/parameter_manifest.xlsx")
+```
+
+`processCalFluxData()` reads the manifest, loads the specified `statAll` files
+and plate maps, organizes paired or unpaired plate reads, and applies the
+configured data-cleaning, filtering, transformation, and quality-control
+steps. It then runs the requested downstream analyses and writes their plots,
+tables, and reports to the configured output directory. The function also
+returns a `CalFluxData` object containing the loaded and processed plate data,
+analysis settings, transformed data, and analysis results.
+
+The manifest is the control file for the entire workflow: it must identify the
+root and output locations, input data and plate-map files, parameters to use,
+and the processing and analysis options. Once the manifest and its referenced
+data are correctly formatted, no calls to the lower-level package functions
+are required.
+
 ```{r libraries}
 library(CalFluxTools)
 library(ggplot2)
