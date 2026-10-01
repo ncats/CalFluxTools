@@ -1,26 +1,15 @@
 # CalFluxTools
 
 CalFluxTools is an R package for parsing, quality-controlling, visualizing,
-transforming, and analyzing calcium flux plate-reader data. It is designed for
-ScreenWorks-normalized data in `statAll` format and supports both paired and
-unpaired study designs.
+transforming, and analyzing calcium flux plate-reader data. It currently is designed for
+ScreenWorks-normalized data from the FLIPR platform in `statAll` format.
 
 For a worked example, see the
 [CalFluxTools example-data vignette](https://ncats.github.io/CalFluxTools/index.html).
 
 ## Installation
 
-Install the Bioconductor dependency and then install CalFluxTools from GitHub:
-
 ```r
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install("ComplexHeatmap")
-
-if (!requireNamespace("remotes", quietly = TRUE)) {
-  install.packages("remotes")
-}
 remotes::install_github("ncats/CalFluxTools")
 ```
 
@@ -33,7 +22,7 @@ in place, the complete workflow is run with one line of code:
 calflux_data <- CalFluxTools::processCalFluxData("path/to/parameter_manifest.xlsx")
 ```
 
-The manifest controls the analysis. It identifies the input files, plate maps,
+See the vignette for an example of a correctly formatted parameter manifest. The manifest identifies the input files, plate maps,
 plate layout, output organization, parameters to retain, processing rules, and
 analyses to run. `processCalFluxData()` uses those settings to load and organize
 the data, run the configured workflow, write reports and figures, and return a
